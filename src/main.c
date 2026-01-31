@@ -1,51 +1,28 @@
-#include "ch32v30x.h"
+#include "ch32v20x.h"
+#include "ch32v20x_spi.h"
 #include "tusb.h"
+#include "usb_interface.h"
+#include <stdint.h>
 
-// Interrupt Handler for USB
-void USBHS_IRQHandler(void) __attribute__((interrupt("WCH-Interrupt-fast")));
-void USBHS_IRQHandler(void) {
-    // tud_int_handler(0);
-    dcd_int_handler(0);
+static void spi_init(void) {
+    SPI_InitTypeDef spi_cfg = {0};
+    SPI_StructInit(&spi_cfg);
+    spi_cfg.SPI_Mode = SPI_Mode_Master;
+    spi_cfg.SPI_DataSize = SPI_DataSize_16b;
+    spi_cfg.SPI_BaudRatePrescaler = SPI_BaudRatePrescaler_16;  // 9 MHz I think
+    SPI_Init(SPI1, &spi_cfg);
 }
 
-int main(void)
-{
-    SystemCoreClockUpdate(); // Ensure clock is setup
+// Call this in your main loop
+int main(void) {
+    // Ensure clock is setup
+    SystemCoreClockUpdate();
 
-    // Init TinyUSB
+    spi_init();
     tud_init(BOARD_TUD_RHPORT);
 
-    while (1)
-    {
-        tud_task(); // Device task
+    while (1) {
+        tud_task();
+        vendor_task();
     }
-}
-
-// Required callbacks
-// Invoked when received GET_REPORT control request
-// Application must fill buffer report's content and return its length.
-// Return zero will cause the stack to STALL request
-uint16_t tud_hid_get_report_cb(uint8_t itf, uint8_t report_id, hid_report_type_t report_type, uint8_t* buffer, uint16_t reqlen)
-{
-  // TODO not Implemented
-  (void) itf;
-  (void) report_id;
-  (void) report_type;
-  (void) buffer;
-  (void) reqlen;
-
-  return 0;
-}
-
-// Invoked when received SET_REPORT control request or
-// received data on OUT endpoint ( Report ID = 0, Type = 0 )
-void tud_hid_set_report_cb(uint8_t itf, uint8_t report_id, hid_report_type_t report_type, uint8_t const* buffer, uint16_t bufsize)
-{
-  // This example doesn't use multiple report and report ID
-  (void) itf;
-  (void) report_id;
-  (void) report_type;
-
-  // echo back anything we received from host
-  tud_hid_report(0, buffer, bufsize);
 }

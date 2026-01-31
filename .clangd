@@ -1,0 +1,7 @@
+CompileFlags:
+  Add:
+    - "--target=riscv32-unknown-unknown-elf"
+    - "-march=rv32imac"    # Add the standard architecture
+  Remove:
+    - "-march=rv32imacxw"  # Remove the WCH proprietary architecture
+    - "-fno-fat-lto-objects"
