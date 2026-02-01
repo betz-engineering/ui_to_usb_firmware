@@ -1,3 +1,7 @@
+#include "ch32v20x.h"
+#include "ch32v20x_gpio.h"
+#include "ch32v20x_spi.h"
+#include "main.h"
 #include "ssd1322.h"
 #include "tusb.h"
 #include "ui_board.h"
@@ -16,8 +20,8 @@ typedef struct __attribute__((packed)) {
 // Short enough to fit in the inter-frame gap, long enough to cover USB jitter
 #define SYNC_TIMEOUT_MS 4
 
-static uint32_t byte_index = 0;
-static uint32_t last_packet_time = 0;
+static unsigned byte_index = 0;
+static unsigned last_packet_time = 0;
 
 void vendor_task(void) {
     if (!tud_vendor_mounted())
@@ -40,7 +44,7 @@ void vendor_task(void) {
     // -----------------------------------------------------------
     // Check if there is data available in the USB buffer
     if (tud_vendor_available()) {
-        uint32_t now = 0;  // board_millis();
+        unsigned now = millis();
 
         // ---------------------------------
         //  Synchronization Logic
@@ -57,24 +61,21 @@ void vendor_task(void) {
         // ---------------------------------
         // Read whatever is available (up to packet size)
         uint8_t buffer[64];
-        uint32_t count = tud_vendor_read(buffer, sizeof(buffer));
+        unsigned count = tud_vendor_read(buffer, sizeof(buffer));
         if (count <= 0)
             return;
 
         // ---------------------------------
         //  Write to display buffer
         // ---------------------------------
-        // Only write if we haven't overflowed the frame
-        if (byte_index == 0) {
-            // send_cmd(0x5C);  // write VRAM command
-        }
+        // Only write if we haven't overflown the frame
+
         if (byte_index < FRAME_SIZE) {
             // Calculate how much we can actually write
-            uint32_t remaining = FRAME_SIZE - byte_index;
+            unsigned remaining = FRAME_SIZE - byte_index;
             if (count > remaining)
                 count = remaining;
-
-            // spi_blocking_write_to_oled(buffer, count);
+            send_fb(byte_index == 0, count, buffer);
             byte_index += count;
         }
 

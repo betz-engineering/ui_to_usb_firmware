@@ -1,4 +1,5 @@
 #include "tusb.h"
+#include <stdint.h>
 #include <string.h>
 
 //--------------------------------------------------------------------+
@@ -65,9 +66,24 @@ uint8_t const desc_configuration[] =
 };
 // clang-format on
 
+// Callbacks required by TinyUSB
+uint8_t const *tud_descriptor_device_cb(void) { return (uint8_t const *)&desc_device; }
+
+uint8_t const *tud_descriptor_configuration_cb(uint8_t index) {
+    (void)index;
+    return desc_configuration;
+}
+
 //--------------------------------------------------------------------+
 // String Descriptors
 //--------------------------------------------------------------------+
+// String Descriptor Index
+enum {
+    STRID_LANGID = 0,
+    STRID_MANUFACTURER,
+    STRID_PRODUCT,
+    STRID_SERIAL,
+};
 
 // Array of pointer to string descriptors
 char const *string_desc_arr[] = {
@@ -77,34 +93,73 @@ char const *string_desc_arr[] = {
     "R-S000",                    // 3: Serials
 };
 
-// Callbacks required by TinyUSB
-uint8_t const *tud_descriptor_device_cb(void) { return (uint8_t const *)&desc_device; }
-
-uint8_t const *tud_descriptor_configuration_cb(uint8_t index) {
-    (void)index;
-    return desc_configuration;
-}
-
 static uint16_t _desc_str[32];
 
+static void put_hex(uint32_t val, uint8_t digits, uint16_t *p) {
+    for (int i = (4 * digits) - 4; i >= 0; i -= 4)
+        *p++ = ("0123456789ABCDEF"[(val >> i) % 16]);
+}
+
+// Will write R1S<unique_id in hex> (27 characters) to desc_str
+int ui_to_usb_get_serial(uint16_t *desc_str) {
+    uint16_t *p = desc_str;
+    *p++ = 'R';
+    *p++ = '1';
+    *p++ = 'S';
+    // Append 12 byte unique ID
+    volatile uint32_t *ch32_uuid = ((volatile uint32_t *)0x1FFFF7E8UL);
+    put_hex(ch32_uuid[0], 8, p);
+    p += 8;
+    put_hex(ch32_uuid[1], 8, p);
+    p += 8;
+    put_hex(ch32_uuid[2], 8, p);
+
+    return 27;
+}
+
+// Invoked when received GET STRING DESCRIPTOR request
+// Application return pointer to descriptor, whose contents must exist long enough for transfer to
+// complete
 uint16_t const *tud_descriptor_string_cb(uint8_t index, uint16_t langid) {
     (void)langid;
-    uint8_t chr_count;
+    size_t chr_count;
 
-    if (index == 0) {
+    switch (index) {
+    case STRID_LANGID:
         memcpy(&_desc_str[1], string_desc_arr[0], 2);
         chr_count = 1;
-    } else {
-        if (!(index < sizeof(string_desc_arr) / sizeof(string_desc_arr[0])))
+        break;
+
+    case STRID_SERIAL:
+        chr_count = ui_to_usb_get_serial(_desc_str + 1);
+        break;
+
+    default:
+        // Note: the 0xEE index string is a Microsoft OS 1.0 Descriptors.
+        // https://docs.microsoft.com/en-us/windows-hardware/drivers/usbcon/microsoft-defined-usb-descriptors
+
+        if (!(index < sizeof(string_desc_arr) / sizeof(string_desc_arr[0]))) {
             return NULL;
+        }
+
         const char *str = string_desc_arr[index];
+
+        // Cap at max char
         chr_count = strlen(str);
-        if (chr_count > 31)
-            chr_count = 31;
-        for (uint8_t i = 0; i < chr_count; i++)
+        size_t const max_count =
+            sizeof(_desc_str) / sizeof(_desc_str[0]) - 1;  // -1 for string type
+        if (chr_count > max_count) {
+            chr_count = max_count;
+        }
+
+        // Convert ASCII string into UTF-16
+        for (size_t i = 0; i < chr_count; i++) {
             _desc_str[1 + i] = str[i];
+        }
+        break;
     }
 
-    _desc_str[0] = (TUSB_DESC_STRING << 8) | (2 * chr_count + 2);
+    // first byte is length (including header), second byte is string type
+    _desc_str[0] = (uint16_t)((TUSB_DESC_STRING << 8) | (2 * chr_count + 2));
     return _desc_str;
 }

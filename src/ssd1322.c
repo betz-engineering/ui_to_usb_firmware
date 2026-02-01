@@ -1,19 +1,22 @@
 #include "ssd1322.h"
-#include "frame_buffer.h"
+#include "ch32v20x_spi.h"
+#include "main.h"
 #include "ui_board.h"
-#include <generated/csr.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include <stdio.h>
 
-// set data/command pin of display, 1 = command, 0 = data
-#define D_C(val) ui_dc_write(val)
+// set data/command pin of display, 0 = command, 1 = data
+#define D_C(val) GPIO_WriteBit(GPIOA, PIN_D_C, val)
 
 // Set the CS_N pin
-#define CS_N(val) SET_GPIO1(OLED_GPIO, GPIO_OUT_REG, OLED_BIT_CSN, val)
+#define CS_N(val) GPIO_WriteBit(GPIOA, PIN_CS_OLED_N, val)
 
-// send 1 byte of data to display
-#define SPI(val) ssd1322_write8(val)
+static void spi_config_oled(void) {
+    while (SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_BSY))
+        ;
+    SPI_NSSInternalSoftwareConfig(SPI1, SPI_NSS_Soft);
+    SPI_DataSizeConfig(SPI1, SPI_DataSize_8b);
+}
 
 // Initialization for NHD-2.8-25664UCB2 OLED display
 // negative = command, positive = data
@@ -51,16 +54,14 @@ static const int16_t init[] = {
 
 // Write a 8 bit register
 static void ssd1322_write8(uint8_t val) {
-    // value will be sent MSB-first
-    ui_phy_mosi_write(val << 24);
-    ui_phy_control_write((8 << 8) | 1);
-    while (!(ui_phy_status_read() & 1))
+    SPI_I2S_SendData(SPI1, val);
+    while (SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_BSY))
         ;
 }
 
 static void send_cmd(uint8_t val) {
     D_C(0);
-    SPI(val);
+    ssd1322_write8(val);
     D_C(1);
 }
 
@@ -69,71 +70,78 @@ static void send_init(const int16_t *init, unsigned len) {
         if (*init < 0)
             send_cmd(-(*init));
         else
-            SPI(*init);
+            ssd1322_write8(*init);
         init++;
     }
     send_cmd(0x00);  // enable custom gamma table
 }
 
 void init_ssd1322(void) {
+    spi_config_oled();
+    CS_N(0);
     D_C(1);
-    ui_phy_cs_write(SSD1322_CS);
     send_init(init, sizeof(init) / sizeof(init[0]));
+    CS_N(1);
 }
 
 void set_brightness(uint8_t val) {
-    ui_phy_cs_write(SSD1322_CS);
+    spi_config_oled();
+    CS_N(0);
     if (val == 0) {
         send_cmd(0xAE);  // display off
     } else {
         send_cmd(0xAF);  // display on
         send_cmd(0xC7);  // set brightness (0 - 15)
-        SPI(val - 1);
+        ssd1322_write8(val - 1);
     }
+    CS_N(1);
 }
 
 void set_inverted(bool val) {
-    ui_phy_cs_write(SSD1322_CS);
+    spi_config_oled();
+    CS_N(0);
     send_cmd(val ? 0xA7 : 0xA6);
+    CS_N(1);
 }
 
-// void send_fb(void) {
-//     // We need to disable the MCP23 ISR as it may want to do its own SPI transaction
-//     ui_phy_cs_write(SSD1322_CS);
-//     send_cmd(0x5C);  // write VRAM command
-//     uint8_t *p = g_frameBuff;
-//     for (unsigned i = 0; i < (DISPLAY_WIDTH * DISPLAY_HEIGHT / 2); i++)
-//         SPI(*p++);
-// }
+void send_fb(bool prefix_cmd, unsigned count, uint8_t *buf) {
+    spi_config_oled();
+    CS_N(0);
+    if (prefix_cmd)
+        send_cmd(0x5C);  // write VRAM command
+    for (unsigned i = 0; i < count; i++)
+        ssd1322_write8(*buf++);
+    CS_N(1);
+}
 
 // x1, y1, x2, y2: the rectangle to update in [pixels]
 // x1, y1, x2 and y2 are all inclusive!
 // note that ssd1322 works with columns of 4 pixels horizontally
 // so the lower 2 bits of x1 and x2 will be truncated
 // data in 4 bits / pixel, 2 pixels / byte
-void send_window_4(unsigned x1, unsigned y1, unsigned x2, unsigned y2, uint8_t *data) {
-    // printf("send_window_4(%3d, %3d, %3d, %3d)\n", x1, y1, x2, y2);
+// void send_window_4(unsigned x1, unsigned y1, unsigned x2, unsigned y2, uint8_t *data) {
+//     // printf("send_window_4(%3d, %3d, %3d, %3d)\n", x1, y1, x2, y2);
 
-    // truncate the 2 LSBs
-    x1 >>= 2;
-    x2 >>= 2;
+//     // truncate the 2 LSBs
+//     x1 >>= 2;
+//     x2 >>= 2;
 
-    ui_phy_cs_write(SSD1322_CS);
-    send_cmd(0x15);  // Set column address range
-    SPI(0x1C + x1);
-    SPI(0x1C + x2);
+//     ui_phy_cs_write(SSD1322_CS);
+//     send_cmd(0x15);  // Set column address range
+//     ssd1322_write8(0x1C + x1);
+//     ssd1322_write8(0x1C + x2);
 
-    send_cmd(0x75);  // Set row address range
-    SPI(y1);
-    SPI(y2);
+//     send_cmd(0x75);  // Set row address range
+//     ssd1322_write8(y1);
+//     ssd1322_write8(y2);
 
-    send_cmd(0x5C);  // write VRAM
-    for (int row = y1; row <= y2; row++) {
-        uint8_t *p = &data[row * DISPLAY_WIDTH / 2 + x1 * 2];
-        for (int column = x1; column <= x2; column++) {
-            // Each column contains 4 pixels = 2 bytes
-            SPI(*p++);
-            SPI(*p++);
-        }
-    }
-}
+//     send_cmd(0x5C);  // write VRAM
+//     for (int row = y1; row <= y2; row++) {
+//         uint8_t *p = &data[row * DISPLAY_WIDTH / 2 + x1 * 2];
+//         for (int column = x1; column <= x2; column++) {
+//             // Each column contains 4 pixels = 2 bytes
+//             ssd1322_write8(*p++);
+//             ssd1322_write8(*p++);
+//         }
+//     }
+// }

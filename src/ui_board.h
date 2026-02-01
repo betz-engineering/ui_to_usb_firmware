@@ -25,13 +25,13 @@
 #define SSD1322_CS (1 << 0)
 #define MCP23_CS (1 << 1)
 
-// # Register this as an interrupt handler
-void ui_isr(void);
-
 // # Call this once to initialize
 void ui_init(void);
 
-// # Call these in the main loop
+// Call in main loop
+void ui_board_poll(void);
+
+// # Call these whenever
 
 // if reset is true, returns number of encoder ticks (and direction) since last call
 // if reset is false, returns accumulated encoder ticks
