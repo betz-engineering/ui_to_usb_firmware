@@ -52,7 +52,7 @@ uint8_t const desc_configuration[] =
 
     // 2. Interface Descriptor (Vendor Specific Class)
     // bLength, bDescriptorType, bInterfaceNumber, bAlternateSetting, bNumEndpoints, bInterfaceClass, bInterfaceSubClass, bInterfaceProtocol, iInterface
-    9, TUSB_DESC_INTERFACE, 0, 0, 2, TUSB_CLASS_VENDOR_SPECIFIC, 0x00, 0x00, 0,
+    9, TUSB_DESC_INTERFACE, 0, 0, 1, TUSB_CLASS_VENDOR_SPECIFIC, 0x00, 0x00, 0,
 
     // 3. Endpoint Descriptor (OUT - Bulk - for Display)
     // bLength, bDescriptorType, bEndpointAddress, bmAttributes, wMaxPacketSize, bInterval

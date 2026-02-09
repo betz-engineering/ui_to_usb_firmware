@@ -23,7 +23,7 @@ def find_ui_board_devices():
         except (usb.core.USBError, ValueError):
             # Skip devices we can't read strings from
             continue
-    return matching_devices
+    return sorted(matching_devices, key=lambda d: d.serial_number)
 
 
 class REQ(IntEnum):
