@@ -14,7 +14,6 @@
 static void spi_config_oled(void) {
     while (SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_BSY))
         ;
-    SPI_NSSInternalSoftwareConfig(SPI1, SPI_NSS_Soft);
     SPI_DataSizeConfig(SPI1, SPI_DataSize_8b);
 }
 

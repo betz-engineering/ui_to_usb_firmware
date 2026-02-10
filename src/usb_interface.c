@@ -6,6 +6,7 @@
 #include "tusb.h"
 #include "ui_board.h"
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 #include <sys/param.h>
 
@@ -22,7 +23,7 @@ typedef struct __attribute__((packed)) {
 // jitter
 #define SYNC_TIMEOUT_MS 4
 
-static unsigned byte_index = 0;
+static int n_written = 0;
 static unsigned last_packet_time = 0;
 
 void vendor_task(void) {
@@ -41,7 +42,7 @@ void vendor_task(void) {
         // ---------------------------------
         // If the bus has been silent for > 4ms, assume this is a NEW frame.
         if ((now - last_packet_time) > SYNC_TIMEOUT_MS) {
-            byte_index = 0;  // Reset pointer to start of framebuffer
+            n_written = 0;  // Reset pointer to start of framebuffer
         }
         // Update timestamp
         last_packet_time = now;
@@ -51,27 +52,28 @@ void vendor_task(void) {
         // ---------------------------------
         // Read whatever is available (up to packet size)
         uint8_t buffer[64];
-        unsigned count = tud_vendor_read(buffer, sizeof(buffer));
-        if (count <= 0)
+        int n_rx = tud_vendor_read(buffer, sizeof(buffer));
+        if (n_rx <= 0)
             return;
 
         // ---------------------------------
         //  Write to display buffer
         // ---------------------------------
         // Only write if we haven't overflown the frame
+        if (n_written < FRAME_SIZE) {
+            // Don't write more then one framebuffer
+            int n_remaining = FRAME_SIZE - n_written;
+            if (n_rx > n_remaining)
+                n_rx = n_remaining;
+            send_fb(n_written == 0, n_rx, buffer);
 
-        if (byte_index < FRAME_SIZE) {
-            // Calculate how much we can actually write
-            unsigned remaining = FRAME_SIZE - byte_index;
-            if (count > remaining)
-                count = remaining;
-            send_fb(byte_index == 0, count, buffer);
-            byte_index += count;
+            n_written += n_rx;
+
+            // Comment the 2 lines below to _require_ a quiet period longer than
+            // SYNC_TIMEOUT_MS before being ready to accept the next frame.
+            if (n_written >= FRAME_SIZE)
+                n_written = 0;
         }
-
-        // Note that once the frame is written completely, we implicitly require a
-        // a quiet period > SYNC_TIMEOUT_MS before we are ready to accept the next
-        // frame and before the byte_index is reset.
     }
 }
 

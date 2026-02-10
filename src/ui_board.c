@@ -44,12 +44,12 @@ static unsigned output_value = 0, output_value_new = 0;
 static void spi_config_mcp(void) {
     while (SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_BSY))
         ;
-    SPI_NSSInternalSoftwareConfig(SPI1, SPI_NSS_Hard);
     SPI_DataSizeConfig(SPI1, SPI_DataSize_16b);
 }
 
 // Write a 16 bit register-pair (suffix _A and _B)
 static void mcp23_write16(uint8_t addr, uint16_t val) {
+    SPI1->CTLR1 |= SPI_NSSInternalSoft_Set;
     // value will be sent MSB-first
     SPI_I2S_SendData(SPI1, (MCP23_OPCODE_W << 8) | addr);
     while (SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_BSY))
@@ -57,11 +57,13 @@ static void mcp23_write16(uint8_t addr, uint16_t val) {
     SPI_I2S_SendData(SPI1, val);
     while (SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_BSY))
         ;
+    SPI1->CTLR1 |= SPI_NSSInternalSoft_Reset;
 }
 
 // Write a 8 bit register
 static void mcp23_write8(uint8_t addr, uint8_t val) {
     SPI_DataSizeConfig(SPI1, SPI_DataSize_8b);
+    SPI1->CTLR1 |= SPI_NSSInternalSoft_Set;
 
     SPI_I2S_SendData(SPI1, MCP23_OPCODE_W);
     while (SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_BSY))
@@ -73,11 +75,14 @@ static void mcp23_write8(uint8_t addr, uint8_t val) {
     while (SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_BSY))
         ;
 
+    SPI1->CTLR1 |= SPI_NSSInternalSoft_Reset;
     SPI_DataSizeConfig(SPI1, SPI_DataSize_16b);
 }
 
 // Read a 16 bit register-pair (suffix _A and _B)
 static uint16_t mcp23_read16(uint8_t addr) {
+    SPI1->CTLR1 |= SPI_NSSInternalSoft_Set;
+
     SPI_I2S_SendData(SPI1, (MCP23_OPCODE_R << 8) | addr);
     while (SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_BSY))
         ;
@@ -86,7 +91,10 @@ static uint16_t mcp23_read16(uint8_t addr) {
     while (SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_BSY))
         ;
 
-    return SPI_I2S_ReceiveData(SPI1);
+    uint16_t tmp = SPI_I2S_ReceiveData(SPI1);
+    SPI1->CTLR1 |= SPI_NSSInternalSoft_Set;
+
+    return tmp;
 }
 
 // 4 bit lookup table for Gray-code transitions
