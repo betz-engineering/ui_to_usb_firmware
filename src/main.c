@@ -71,7 +71,7 @@ static void peripherals_init(void) {
     GPIO_InitTypeDef gpio = {0};
 
     // Inputs
-    gpio.GPIO_Mode = GPIO_Mode_IPD;
+    gpio.GPIO_Mode = GPIO_Mode_IPU;
     gpio.GPIO_Pin = PIN_INT_IO | PIN_SDI;
     gpio.GPIO_Speed = GPIO_Speed_50MHz;
     GPIO_Init(GPIOA, &gpio);
@@ -94,8 +94,8 @@ static void peripherals_init(void) {
     SPI_InitTypeDef spi_cfg = {0};
     SPI_StructInit(&spi_cfg);
     spi_cfg.SPI_Mode = SPI_Mode_Master;
-    spi_cfg.SPI_DataSize = SPI_DataSize_16b;
-    spi_cfg.SPI_BaudRatePrescaler = SPI_BaudRatePrescaler_16;  // 9 MHz I think
+    spi_cfg.SPI_DataSize = SPI_DataSize_8b;
+    spi_cfg.SPI_BaudRatePrescaler = SPI_BaudRatePrescaler_256;  // 9 MHz I think
     spi_cfg.SPI_NSS = SPI_NSS_Soft;
     SPI_Init(SPI1, &spi_cfg);
     SPI_Cmd(SPI1, ENABLE);
@@ -117,12 +117,12 @@ int main(void) {
     SystemInit();
     peripherals_init();
 
-    // SDI_Printf_Enable();
+    SDI_Printf_Enable();
     SysTick_Config(SystemCoreClock / 1000);
     __enable_irq();
 
-    // delay_ms(1000);
-    // puts("Hi, this is ui_to_usb firmware!\n");
+    delay_ms(1000);
+    puts("Hi, this is ui_to_usb firmware!\n");
 
     // Init tiny-USB
     tud_init(BOARD_TUD_RHPORT);
@@ -134,6 +134,7 @@ int main(void) {
         tud_task();
         vendor_task();
         ui_board_poll();
+        delay_ms(1000);
         i++;
     }
 }
