@@ -1,5 +1,6 @@
 #include "ssd1322.h"
 #include "ch32v20x_spi.h"
+#include "core_riscv.h"
 #include "main.h"
 #include "ui_board.h"
 #include <stdbool.h>
@@ -14,7 +15,9 @@
 static void spi_config_oled(void) {
     while (SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_BSY))
         ;
+    SPI_Cmd(SPI1, DISABLE);
     SPI_DataSizeConfig(SPI1, SPI_DataSize_8b);
+    SPI_Cmd(SPI1, ENABLE);
 }
 
 // Initialization for NHD-2.8-25664UCB2 OLED display
@@ -108,8 +111,13 @@ void send_fb(bool prefix_cmd, unsigned count, uint8_t *buf) {
     CS_N(0);
     if (prefix_cmd)
         send_cmd(0x5C);  // write VRAM command
-    for (unsigned i = 0; i < count; i++)
-        ssd1322_write8(*buf++);
+    for (unsigned i = 0; i < count; i++) {
+        while (!SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_TXE))
+            ;
+        SPI_I2S_SendData(SPI1, *buf++);
+    }
+    while (SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_BSY))
+        ;
     CS_N(1);
 }
 

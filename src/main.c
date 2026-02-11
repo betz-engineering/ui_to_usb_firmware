@@ -66,9 +66,7 @@ static void peripherals_init(void) {
     // --------
     //  GPIOA
     // --------
-    RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA | RCC_APB2Periph_AFIO | RCC_APB2Periph_SPI1,
-                           ENABLE);
-    GPIO_DeInit(GPIOA);
+    RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA | RCC_APB2Periph_SPI1, ENABLE);
 
     GPIO_InitTypeDef gpio = {0};
 
@@ -80,13 +78,13 @@ static void peripherals_init(void) {
 
     // Normal Outputs
     gpio.GPIO_Mode = GPIO_Mode_Out_PP;
-    gpio.GPIO_Pin = PIN_RES_N | PIN_D_C | PIN_CS_OLED_N;
+    gpio.GPIO_Pin = PIN_RES_N | PIN_D_C | PIN_CS_OLED_N | PIN_CS_IO_N;
     gpio.GPIO_Speed = GPIO_Speed_50MHz;
     GPIO_Init(GPIOA, &gpio);
 
     // Alternate Outputs
     gpio.GPIO_Mode = GPIO_Mode_AF_PP;
-    gpio.GPIO_Pin = PIN_SCK | PIN_SDO | PIN_CS_IO_N;
+    gpio.GPIO_Pin = PIN_SCK | PIN_SDO;
     gpio.GPIO_Speed = GPIO_Speed_50MHz;
     GPIO_Init(GPIOA, &gpio);
 
@@ -97,7 +95,7 @@ static void peripherals_init(void) {
     SPI_StructInit(&spi_cfg);
     spi_cfg.SPI_Mode = SPI_Mode_Master;
     spi_cfg.SPI_DataSize = SPI_DataSize_16b;
-    spi_cfg.SPI_BaudRatePrescaler = SPI_BaudRatePrescaler_128;  // 9 MHz I think
+    spi_cfg.SPI_BaudRatePrescaler = SPI_BaudRatePrescaler_16;  // 9 MHz I think
     spi_cfg.SPI_NSS = SPI_NSS_Soft;
     SPI_Init(SPI1, &spi_cfg);
     SPI_Cmd(SPI1, ENABLE);
@@ -108,7 +106,7 @@ static void peripherals_init(void) {
     assert(SystemCoreClock == 144000000);
     RCC_USBCLKConfig(RCC_USBCLKSource_PLLCLK_Div3);
     RCC_APB1PeriphClockCmd(RCC_APB1Periph_USB, ENABLE);  // FSDEV (port 0)
-    RCC_AHBPeriphClockCmd(RCC_AHBPeriph_USBFS, ENABLE);  // USBFS (port 1)
+    // RCC_AHBPeriphClockCmd(RCC_AHBPeriph_USBFS, ENABLE);  // USBFS (port 1)
 }
 
 // Call this in your main loop
@@ -136,10 +134,6 @@ int main(void) {
         tud_task();
         vendor_task();
         ui_board_poll();
-        // GPIO_WriteBit(GPIOA, PIN_CS_IO_N, i & 1);
-        // GPIO_WriteBit(GPIOA, PIN_RES_N, i & 1);
-        // GPIO_WriteBit(GPIOA, PIN_SCK, i & 1);
-        // GPIO_WriteBit(GPIOA, PIN_SDO, i & 1);
         i++;
     }
 }

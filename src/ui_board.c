@@ -1,9 +1,13 @@
 #include "ui_board.h"
 #include "ch32v20x_spi.h"
+#include "core_riscv.h"
 #include "main.h"
 #include "ssd1322.h"
 #include <stdint.h>
 #include <stdio.h>
+
+// Set the CS_N pin
+#define CS_N(val) GPIO_WriteBit(GPIOA, PIN_CS_IO_N, val)
 
 // Min. duration for a long press in [clock-cycles]
 #define T_LONG 50000000
@@ -44,57 +48,65 @@ static unsigned output_value = 0, output_value_new = 0;
 static void spi_config_mcp(void) {
     while (SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_BSY))
         ;
+    SPI_Cmd(SPI1, DISABLE);
     SPI_DataSizeConfig(SPI1, SPI_DataSize_16b);
+    SPI_Cmd(SPI1, ENABLE);
 }
 
 // Write a 16 bit register-pair (suffix _A and _B)
 static void mcp23_write16(uint8_t addr, uint16_t val) {
-    SPI1->CTLR1 |= SPI_NSSInternalSoft_Set;
     // value will be sent MSB-first
+    CS_N(0);
     SPI_I2S_SendData(SPI1, (MCP23_OPCODE_W << 8) | addr);
-    while (SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_BSY))
+    while (!SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_TXE))
         ;
+
     SPI_I2S_SendData(SPI1, val);
     while (SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_BSY))
         ;
-    SPI1->CTLR1 |= SPI_NSSInternalSoft_Reset;
+
+    CS_N(1);
 }
 
 // Write a 8 bit register
 static void mcp23_write8(uint8_t addr, uint8_t val) {
+    SPI_Cmd(SPI1, DISABLE);
     SPI_DataSizeConfig(SPI1, SPI_DataSize_8b);
-    SPI1->CTLR1 |= SPI_NSSInternalSoft_Set;
+    SPI_Cmd(SPI1, ENABLE);
 
+    CS_N(0);
     SPI_I2S_SendData(SPI1, MCP23_OPCODE_W);
-    while (SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_BSY))
+    while (!SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_TXE))
         ;
+
     SPI_I2S_SendData(SPI1, addr);
-    while (SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_BSY))
+    while (!SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_TXE))
         ;
+
     SPI_I2S_SendData(SPI1, val);
     while (SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_BSY))
         ;
 
-    SPI1->CTLR1 |= SPI_NSSInternalSoft_Reset;
+    CS_N(1);
+    SPI_Cmd(SPI1, DISABLE);
     SPI_DataSizeConfig(SPI1, SPI_DataSize_16b);
+    SPI_Cmd(SPI1, ENABLE);
 }
 
 // Read a 16 bit register-pair (suffix _A and _B)
 static uint16_t mcp23_read16(uint8_t addr) {
-    SPI1->CTLR1 |= SPI_NSSInternalSoft_Set;
+    CS_N(0);
 
     SPI_I2S_SendData(SPI1, (MCP23_OPCODE_R << 8) | addr);
-    while (SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_BSY))
+    while (!SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_TXE))
         ;
 
     SPI_I2S_SendData(SPI1, 0);
     while (SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_BSY))
         ;
 
-    uint16_t tmp = SPI_I2S_ReceiveData(SPI1);
-    SPI1->CTLR1 |= SPI_NSSInternalSoft_Set;
-
-    return tmp;
+    CS_N(1);
+    return SPI_I2S_ReceiveData(SPI1);
 }
 
 // 4 bit lookup table for Gray-code transitions
@@ -139,6 +151,12 @@ void ui_board_poll() {
     }
     enc_d = enc;
     gpio_state = val;
+
+    button_flags &= 3;
+    if (val & IO_ENC_SW)
+        button_flags |= 1;
+    if (val & IO_BACK_SW)
+        button_flags |= 2;
 }
 
 void ui_init(void) {
@@ -150,6 +168,7 @@ void ui_init(void) {
 
     // # Init MCP23
     spi_config_mcp();
+
     // A special mode (Byte mode with IOCON.BANK = 0) causes the address pointer
     // to toggle between associated A/B register pairs.
     mcp23_write8(MCP23_IOCON, INTPOL | DISSLW | SEQOP | MIRROR);
@@ -160,6 +179,7 @@ void ui_init(void) {
     // interrupt on any input change
     mcp23_write16(MCP23_INTCON, 0);
 
+    output_value = 0;
     set_leda(0);
     set_ledb(0);
 
@@ -176,7 +196,7 @@ int get_encoder_ticks(bool reset) {
 
 unsigned get_button_flags(void) {
     unsigned ret = button_flags;
-    button_flags &= 0x3;  // clear the button-push event flags
+    // button_flags &= 0x3;  // clear the button-push event flags
     return ret;
 }
 
