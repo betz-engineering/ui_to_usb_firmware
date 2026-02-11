@@ -80,6 +80,7 @@ static void peripherals_init(void) {
     gpio.GPIO_Mode = GPIO_Mode_Out_PP;
     gpio.GPIO_Pin = PIN_RES_N | PIN_D_C | PIN_CS_OLED_N | PIN_CS_IO_N;
     gpio.GPIO_Speed = GPIO_Speed_50MHz;
+    GPIO_SetBits(GPIOA, PIN_CS_OLED_N | PIN_CS_IO_N | PIN_RES_N);
     GPIO_Init(GPIOA, &gpio);
 
     // Alternate Outputs
@@ -95,7 +96,7 @@ static void peripherals_init(void) {
     SPI_StructInit(&spi_cfg);
     spi_cfg.SPI_Mode = SPI_Mode_Master;
     spi_cfg.SPI_DataSize = SPI_DataSize_8b;
-    spi_cfg.SPI_BaudRatePrescaler = SPI_BaudRatePrescaler_256;  // 9 MHz I think
+    spi_cfg.SPI_BaudRatePrescaler = SPI_BaudRatePrescaler_16;  // 9 MHz I think
     spi_cfg.SPI_NSS = SPI_NSS_Soft;
     SPI_Init(SPI1, &spi_cfg);
     SPI_Cmd(SPI1, ENABLE);
@@ -109,6 +110,35 @@ static void peripherals_init(void) {
     // RCC_AHBPeriphClockCmd(RCC_AHBPeriph_USBFS, ENABLE);  // USBFS (port 1)
 }
 
+// Helper function to exchange one byte
+uint8_t spi_rxtx(uint8_t byteToSend) {
+    SPI_I2S_SendData(SPI1, byteToSend);
+    while (SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_BSY))
+        ;
+
+    // Return the received data (and clear the RXNE flag)
+    return SPI_I2S_ReceiveData(SPI1);
+}
+
+static void print_state() {
+    static int enc_ = 0;
+    static uint8_t bf_ = 0;
+
+    int enc = get_encoder_ticks(false);
+    if (enc != enc_) {
+        printf("enc: %d\n", enc);
+        enc_ = enc;
+    }
+    int bf = get_button_flags();
+    if (bf != bf_) {
+        printf("btn: ");
+        for (int b = 5; b >= 0; b--)
+            printf(((1 << b) & bf) ? "1" : "0");
+        printf("\n");
+        bf_ = bf;
+    }
+}
+
 // Call this in your main loop
 int main(void) {
     __disable_irq();
@@ -117,24 +147,22 @@ int main(void) {
     SystemInit();
     peripherals_init();
 
-    SDI_Printf_Enable();
+    // SDI_Printf_Enable();
     SysTick_Config(SystemCoreClock / 1000);
     __enable_irq();
 
-    delay_ms(1000);
-    puts("Hi, this is ui_to_usb firmware!\n");
+    // delay_ms(1000);
+    // puts("Hi, this is ui_to_usb firmware!\n");
 
     // Init tiny-USB
     tud_init(BOARD_TUD_RHPORT);
 
     ui_init();
 
-    unsigned i = 0;
     while (1) {
+        ui_board_poll();
         tud_task();
         vendor_task();
-        ui_board_poll();
-        delay_ms(1000);
-        i++;
+        // print_state();
     }
 }

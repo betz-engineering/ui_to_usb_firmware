@@ -1,4 +1,5 @@
 #pragma once
+#include <stdint.h>
 
 #define PIN_INT_IO GPIO_Pin_0
 #define PIN_RES_N GPIO_Pin_1
@@ -11,3 +12,4 @@
 
 unsigned millis(void);
 void delay_ms(unsigned val);
+uint8_t spi_rxtx(uint8_t byteToSend);

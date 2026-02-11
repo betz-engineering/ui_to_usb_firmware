@@ -46,16 +46,9 @@ static const int16_t init[] = {
 };
 // clang-format on
 
-// Write a 8 bit register
-static void ssd1322_write8(uint8_t val) {
-    SPI_I2S_SendData(SPI1, val);
-    while (SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_BSY))
-        ;
-}
-
 static void send_cmd(uint8_t val) {
     D_C(0);
-    ssd1322_write8(val);
+    spi_rxtx(val);
     D_C(1);
 }
 
@@ -64,7 +57,7 @@ static void send_init(const int16_t *init, unsigned len) {
         if (*init < 0)
             send_cmd(-(*init));
         else
-            ssd1322_write8(*init);
+            spi_rxtx(*init);
         init++;
     }
     send_cmd(0x00);  // enable custom gamma table
@@ -84,7 +77,7 @@ void set_brightness(uint8_t val) {
     } else {
         send_cmd(0xAF);  // display on
         send_cmd(0xC7);  // set brightness (0 - 15)
-        ssd1322_write8(val - 1);
+        spi_rxtx(val - 1);
     }
     CS_N(1);
 }
@@ -95,17 +88,31 @@ void set_inverted(bool val) {
     CS_N(1);
 }
 
+void clear_fb(void) {
+    CS_N(0);
+    send_cmd(0x5C);  // write VRAM command
+    for (int i = 0; i < 8192; i++)
+        spi_rxtx(0);
+    CS_N(1);
+}
+
 void send_fb(bool prefix_cmd, unsigned count, uint8_t *buf) {
     CS_N(0);
     if (prefix_cmd)
         send_cmd(0x5C);  // write VRAM command
-    for (unsigned i = 0; i < count; i++) {
+    for (int i = 0; i < count; i++) {
+        // spi_rxtx(*buf++);
+        // doing it like this removes gaps between bytes
         while (!SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_TXE))
             ;
         SPI_I2S_SendData(SPI1, *buf++);
     }
     while (SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_BSY))
         ;
+
+    // Clear RXNE flag. Just in case.
+    SPI_I2S_ReceiveData(SPI1);
+
     CS_N(1);
 }
 
@@ -123,20 +130,20 @@ void send_fb(bool prefix_cmd, unsigned count, uint8_t *buf) {
 
 //     ui_phy_cs_write(SSD1322_CS);
 //     send_cmd(0x15);  // Set column address range
-//     ssd1322_write8(0x1C + x1);
-//     ssd1322_write8(0x1C + x2);
+//     spi_rxtx(0x1C + x1);
+//     spi_rxtx(0x1C + x2);
 
 //     send_cmd(0x75);  // Set row address range
-//     ssd1322_write8(y1);
-//     ssd1322_write8(y2);
+//     spi_rxtx(y1);
+//     spi_rxtx(y2);
 
 //     send_cmd(0x5C);  // write VRAM
 //     for (int row = y1; row <= y2; row++) {
 //         uint8_t *p = &data[row * DISPLAY_WIDTH / 2 + x1 * 2];
 //         for (int column = x1; column <= x2; column++) {
 //             // Each column contains 4 pixels = 2 bytes
-//             ssd1322_write8(*p++);
-//             ssd1322_write8(*p++);
+//             spi_rxtx(*p++);
+//             spi_rxtx(*p++);
 //         }
 //     }
 // }

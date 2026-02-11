@@ -89,16 +89,20 @@ char const *string_desc_arr[] = {
 static uint16_t _desc_str[32];
 
 static void put_hex(uint32_t val, uint8_t digits, uint16_t *p) {
-    for (int i = (4 * digits) - 4; i >= 0; i -= 4)
-        *p++ = ("0123456789ABCDEF"[(val >> i) % 16]);
+    const char lut[] = "0123456789ABCDEF";
+
+    for (int i = 0; i < 4 * digits; i += 8) {
+        *p++ = lut[(val >> (i + 4)) % 16];
+        *p++ = lut[(val >> i) % 16];
+    }
 }
 
-// Will write R1S<unique_id in hex> (27 characters) to desc_str
+// Will write R1_<unique_id in hex> (27 characters) to desc_str
 int ui_to_usb_get_serial(uint16_t *desc_str) {
     uint16_t *p = desc_str;
     *p++ = 'R';
     *p++ = '1';
-    *p++ = 'S';
+    *p++ = '_';
     // Append 12 byte unique ID
     volatile uint32_t *ch32_uuid = ((volatile uint32_t *)0x1FFFF7E8UL);
     put_hex(ch32_uuid[0], 8, p);
