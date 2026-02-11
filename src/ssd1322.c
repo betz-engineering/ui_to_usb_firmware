@@ -12,14 +12,6 @@
 // Set the CS_N pin
 #define CS_N(val) GPIO_WriteBit(GPIOA, PIN_CS_OLED_N, val)
 
-static void spi_config_oled(void) {
-    while (SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_BSY))
-        ;
-    SPI_Cmd(SPI1, DISABLE);
-    SPI_DataSizeConfig(SPI1, SPI_DataSize_8b);
-    SPI_Cmd(SPI1, ENABLE);
-}
-
 // Initialization for NHD-2.8-25664UCB2 OLED display
 // negative = command, positive = data
 // clang-format off
@@ -79,7 +71,6 @@ static void send_init(const int16_t *init, unsigned len) {
 }
 
 void init_ssd1322(void) {
-    spi_config_oled();
     CS_N(0);
     D_C(1);
     send_init(init, sizeof(init) / sizeof(init[0]));
@@ -87,7 +78,6 @@ void init_ssd1322(void) {
 }
 
 void set_brightness(uint8_t val) {
-    spi_config_oled();
     CS_N(0);
     if (val == 0) {
         send_cmd(0xAE);  // display off
@@ -100,14 +90,12 @@ void set_brightness(uint8_t val) {
 }
 
 void set_inverted(bool val) {
-    spi_config_oled();
     CS_N(0);
     send_cmd(val ? 0xA7 : 0xA6);
     CS_N(1);
 }
 
 void send_fb(bool prefix_cmd, unsigned count, uint8_t *buf) {
-    spi_config_oled();
     CS_N(0);
     if (prefix_cmd)
         send_cmd(0x5C);  // write VRAM command

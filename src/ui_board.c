@@ -45,68 +45,51 @@ static volatile uint16_t gpio_state = 0;
 static unsigned button_flags = 0;
 static unsigned output_value = 0, output_value_new = 0;
 
-static void spi_config_mcp(void) {
-    while (SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_BSY))
+// Helper function to exchange one byte
+static uint8_t spi_rxtx(uint8_t byteToSend) {
+    // 1. Wait until the transmit buffer is empty
+    while (!SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_TXE))
         ;
-    SPI_Cmd(SPI1, DISABLE);
-    SPI_DataSizeConfig(SPI1, SPI_DataSize_16b);
-    SPI_Cmd(SPI1, ENABLE);
+
+    // 2. Send the byte
+    SPI_I2S_SendData(SPI1, byteToSend);
+
+    // 3. Wait until a byte is received (RXNE)
+    // This ensures the clock cycles have finished and data is ready
+    while (!SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_RXNE))
+        ;
+
+    // 4. Return the received data (and clear the RXNE flag)
+    return SPI_I2S_ReceiveData(SPI1);
 }
 
 // Write a 16 bit register-pair (suffix _A and _B)
 static void mcp23_write16(uint8_t addr, uint16_t val) {
     // value will be sent MSB-first
     CS_N(0);
-    SPI_I2S_SendData(SPI1, (MCP23_OPCODE_W << 8) | addr);
-    while (!SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_TXE))
-        ;
-
-    SPI_I2S_SendData(SPI1, val);
-    while (SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_BSY))
-        ;
-
+    spi_rxtx(MCP23_OPCODE_W);
+    spi_rxtx(addr);
+    spi_rxtx(val >> 8);
+    spi_rxtx(val & 0xFF);
     CS_N(1);
 }
 
 // Write a 8 bit register
 static void mcp23_write8(uint8_t addr, uint8_t val) {
-    SPI_Cmd(SPI1, DISABLE);
-    SPI_DataSizeConfig(SPI1, SPI_DataSize_8b);
-    SPI_Cmd(SPI1, ENABLE);
-
     CS_N(0);
-    SPI_I2S_SendData(SPI1, MCP23_OPCODE_W);
-    while (!SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_TXE))
-        ;
-
-    SPI_I2S_SendData(SPI1, addr);
-    while (!SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_TXE))
-        ;
-
-    SPI_I2S_SendData(SPI1, val);
-    while (SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_BSY))
-        ;
-
+    spi_rxtx(MCP23_OPCODE_W);
+    spi_rxtx(addr);
+    spi_rxtx(val);
     CS_N(1);
-    SPI_Cmd(SPI1, DISABLE);
-    SPI_DataSizeConfig(SPI1, SPI_DataSize_16b);
-    SPI_Cmd(SPI1, ENABLE);
 }
 
-// Read a 16 bit register-pair (suffix _A and _B)
 static uint16_t mcp23_read16(uint8_t addr) {
     CS_N(0);
-
-    SPI_I2S_SendData(SPI1, (MCP23_OPCODE_R << 8) | addr);
-    while (!SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_TXE))
-        ;
-
-    SPI_I2S_SendData(SPI1, 0);
-    while (SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_BSY))
-        ;
-
+    spi_rxtx(MCP23_OPCODE_R);
+    spi_rxtx(addr);
+    uint16_t val = (spi_rxtx(0) << 8) | spi_rxtx(0);
     CS_N(1);
-    return SPI_I2S_ReceiveData(SPI1);
+    return val;
 }
 
 // 4 bit lookup table for Gray-code transitions
@@ -114,18 +97,19 @@ static const int8_t enc_table[16] = {0, -1, 1, 0, 1, 0, 0, -1, -1, 0, 0, 1, 0, 1
 
 void ui_board_poll() {
     if (output_value_new != output_value) {
-        spi_config_mcp();
         mcp23_write16(MCP23_OLAT, output_value_new);
         output_value = output_value_new;
     }
 
     // Skip reading IO state if the INT_ON_CHANGE pin is low (no change)
-    if (!GPIO_ReadInputDataBit(GPIOA, PIN_INT_IO))
+    if (!GPIO_ReadInputDataBit(GPIOA, PIN_INT_IO)) {
+        printf("no int\n");
         return;
+    }
 
     // Read the MCP23 IO pin state
-    spi_config_mcp();
     const unsigned val = mcp23_read16(MCP23_GPIO);
+    printf("MCP23_GPIO: %x\n", val);
 
     // # Rotary encoder
     static int8_t enc_acc = 0, enc_d = 0;
@@ -165,9 +149,6 @@ void ui_init(void) {
     delay_ms(1);
     GPIO_SetBits(GPIOA, PIN_RES_N);
     delay_ms(1);
-
-    // # Init MCP23
-    spi_config_mcp();
 
     // A special mode (Byte mode with IOCON.BANK = 0) causes the address pointer
     // to toggle between associated A/B register pairs.
