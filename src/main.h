@@ -1,6 +1,9 @@
 #pragma once
 #include <stdint.h>
 
+#define PIN_LED GPIO_Pin_8
+// #define PIN_LED GPIO_Pin_15  // Only for nanoCH32V203 dev board
+
 #define PIN_INT_IO GPIO_Pin_0
 #define PIN_RES_N GPIO_Pin_1
 #define PIN_D_C GPIO_Pin_2

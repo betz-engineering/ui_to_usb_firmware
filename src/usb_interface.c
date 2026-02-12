@@ -25,6 +25,7 @@ typedef struct __attribute__((packed)) {
 
 static int n_written = 0;
 static unsigned last_packet_time = 0;
+static unsigned activity_count = 0;  // blink the Status LED on activity
 
 void vendor_task(void) {
     if (!tud_vendor_mounted())
@@ -71,10 +72,13 @@ void vendor_task(void) {
 
             // Comment the 2 lines below to _require_ a quiet period longer than
             // SYNC_TIMEOUT_MS before being ready to accept the next frame.
-            if (n_written >= FRAME_SIZE)
+            if (n_written >= FRAME_SIZE) {
                 n_written = 0;
+                activity_count++;
+            }
         }
     }
+    GPIO_WriteBit(GPIOA, PIN_LED, !(activity_count & (1 << 6)));
 }
 
 // Command IDs
@@ -124,6 +128,7 @@ bool tud_vendor_control_xfer_cb(uint8_t rhport,
         case CMD_BTNS_ENC:
             packet.button_flags = get_button_flags();
             packet.encoder_delta = get_encoder_ticks(true);
+            activity_count++;
             return tud_control_xfer(rhport, request, (void *)&packet, sizeof(packet));
 
         case CMD_OLED_BRIGHTNESS:

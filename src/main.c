@@ -78,9 +78,9 @@ static void peripherals_init(void) {
 
     // Normal Outputs
     gpio.GPIO_Mode = GPIO_Mode_Out_PP;
-    gpio.GPIO_Pin = PIN_RES_N | PIN_D_C | PIN_CS_OLED_N | PIN_CS_IO_N;
+    gpio.GPIO_Pin = PIN_RES_N | PIN_D_C | PIN_CS_OLED_N | PIN_CS_IO_N | PIN_LED;
     gpio.GPIO_Speed = GPIO_Speed_50MHz;
-    GPIO_SetBits(GPIOA, PIN_CS_OLED_N | PIN_CS_IO_N | PIN_RES_N);
+    GPIO_SetBits(GPIOA, PIN_CS_OLED_N | PIN_CS_IO_N | PIN_RES_N | PIN_LED);
     GPIO_Init(GPIOA, &gpio);
 
     // Alternate Outputs
