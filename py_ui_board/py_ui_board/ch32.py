@@ -1,3 +1,4 @@
+"""User-space library for the ui_to_usb Rev: 1  based on Ch32V203"""
 from enum import IntEnum
 from PIL import Image
 import numpy as np
@@ -47,7 +48,9 @@ class CMD(IntEnum):
 
 
 class UiBoard:
-    def __init__(self, dev: usb.core.Device):
+    def __init__(self, dev: usb.core.Device | None = None):
+        if dev is None:
+            dev = find_ui_board_devices()[0]
         self.dev = dev
         dev.set_configuration()
         self.led_state = 0  # {0, LEDB_B, LEDB_G, LEDB_R, 0, LEDA_B, LEDA_G, LEDA_R,}
