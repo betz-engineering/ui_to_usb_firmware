@@ -133,27 +133,19 @@ void ui_board_poll() {
     }
 
     // # Rotary encoder
-    static int8_t enc_acc = 0, enc_d = 0;
+    static int8_t enc_d = 0;
     int8_t enc = 0;
     // read the current encoder state into enc {B, A}
     if (val & IO_ENC_B)
         enc = 1;
     if (val & IO_ENC_A)
         enc |= 2;
-    // Decode current and previous encoder state with a 4 bit lookup table, accumulate steps
-    enc_acc += enc_table[(enc_d << 2) | enc];
 
+    // Decode current and previous encoder state with a 4 bit lookup table, accumulate steps
     // The encoder makes 4 electrical steps / detent.
-    // Mechanically stable states (between detents) are 0b10, 0b11, 0b01
-    // 0b00 is always a unstable state (on a detent)
-    // Only check the accumulator when in a stable state
-    if (enc != 0) {
-        if (enc_acc >= 2)
-            enc_sum++;
-        if (enc_acc <= -2)
-            enc_sum--;
-        enc_acc = 0;
-    }
+    // so the actual useful value is enc_sum >> 2. The LSB may jitter due to switch bouncing.
+    enc_sum += enc_table[(enc_d << 2) | enc];
+
     enc_d = enc;
     gpio_state = val;
 }
@@ -185,10 +177,14 @@ void ui_init(void) {
 }
 
 int get_encoder_ticks(bool reset) {
-    int ret = enc_sum;
+    static int last_ticks = 0;
+    int tmp = enc_sum;
+    int ret = tmp - last_ticks;
+
     if (reset)
-        enc_sum = 0;
-    return ret;
+        last_ticks = tmp;
+
+    return ret >> 2;
 }
 
 unsigned get_button_flags(void) {

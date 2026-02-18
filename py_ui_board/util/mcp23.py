@@ -62,7 +62,7 @@ class Mcp23:
         # Internal state for decoding encoder / buttons
         self.io_state = 0
         self.enc = 0
-        self.enc_acc = 0
+        self.last_ticks = 0
         self.enc_sum = 0
         self.ts_back_sw = 0.0
         self.ts_enc_sw = 0.0
@@ -172,17 +172,9 @@ class Mcp23:
             enc |= 2
 
         # Decode current and previous encoder state with a 4 bit lookup table, accumulate steps
-        self.enc_acc += Mcp23.GRAY_TABLE[(self.enc << 2) | enc]
-
         # The encoder makes 4 electrical steps / detent.
-        if enc != 0:
-            if self.enc_acc >= 2:
-                self.enc_sum += 1
-
-            if self.enc_acc <= -2:
-                self.enc_sum -= 1
-
-            self.enc_acc = 0
+        # so the actual useful value is enc_sum >> 2. The LSB may jitter due to switch bouncing.
+        self.enc_sum += Mcp23.GRAY_TABLE[(self.enc << 2) | enc]
 
         self.enc = enc
         self.io_state = io_state
@@ -214,9 +206,12 @@ class Mcp23:
         if reset is true, returns difference to last call
         """
         tmp = self.enc_sum
+        ret = tmp - self.last_ticks
+
         if reset:
-            self.enc_sum = 0
-        return tmp
+            self.last_ticks = tmp
+
+        return ret >> 2
 
     def get_button_flags(self):
         """returns flags indicating button event
