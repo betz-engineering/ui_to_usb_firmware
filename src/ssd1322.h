@@ -10,6 +10,10 @@ void set_brightness(uint8_t val);
 // invert the display
 void set_inverted(bool val);
 
+// Set all bytes in framebuffer to 0
+void clear_fb(void);
+
+// Write to framebuffer
 void send_fb(bool prefix_cmd, unsigned count, uint8_t *buf);
 
 // send a certain rectangular window of the framebuffer to the display

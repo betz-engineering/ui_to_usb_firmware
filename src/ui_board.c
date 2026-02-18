@@ -9,12 +9,14 @@
 // Set the CS_N pin
 #define CS_N(val) GPIO_WriteBit(GPIOA, PIN_CS_IO_N, val)
 
-// Min. duration for a long press in [clock-cycles]
-#define T_LONG 50000000
+// Min. duration for a long press in [ms]
+#define T_LONG 300
 
 // Bit 1, 2 and 3 of MCP23_OPCODE_W encode the hardware address (strapping pins)
 #define MCP23_OPCODE_W 0x40
 #define MCP23_OPCODE_R (MCP23_OPCODE_W | 1)
+
+#define OLAT_RESET (IO_LEDA_R | IO_LEDA_G | IO_LEDA_B | IO_LEDB_R | IO_LEDB_G | IO_LEDB_B)
 
 // Registers of MCP23 IO expander. We always use 16 bit SPI transactions
 // As SPI is MSB first, we have to start with the _B register address
@@ -44,24 +46,6 @@ static volatile int enc_sum = 0;
 static volatile uint16_t gpio_state = 0;
 static unsigned button_flags = 0;
 static unsigned output_value = 0, output_value_new = 0;
-
-// Helper function to exchange one byte
-static uint8_t spi_rxtx(uint8_t byteToSend) {
-    // 1. Wait until the transmit buffer is empty
-    while (!SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_TXE))
-        ;
-
-    // 2. Send the byte
-    SPI_I2S_SendData(SPI1, byteToSend);
-
-    // 3. Wait until a byte is received (RXNE)
-    // This ensures the clock cycles have finished and data is ready
-    while (!SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_RXNE))
-        ;
-
-    // 4. Return the received data (and clear the RXNE flag)
-    return SPI_I2S_ReceiveData(SPI1);
-}
 
 // Write a 16 bit register-pair (suffix _A and _B)
 static void mcp23_write16(uint8_t addr, uint16_t val) {
@@ -96,6 +80,11 @@ static uint16_t mcp23_read16(uint8_t addr) {
 static const int8_t enc_table[16] = {0, -1, 1, 0, 1, 0, 0, -1, -1, 0, 0, 1, 0, 1, -1, 0};
 
 void ui_board_poll() {
+    static unsigned cycle_enc_sw = 0, cycle_back_sw = 0;
+
+    // Read clock cycle counter
+    unsigned cycles = millis();
+
     if (output_value_new != output_value) {
         mcp23_write16(MCP23_OLAT, output_value_new);
         output_value = output_value_new;
@@ -110,6 +99,38 @@ void ui_board_poll() {
     // Read the MCP23 IO pin state
     const unsigned val = mcp23_read16(MCP23_GPIO);
     printf("MCP23_GPIO: %x\n", val);
+
+    // decode buttons states (rising or falling edge of the input signal)
+    unsigned rising = (~gpio_state) & val;
+    unsigned falling = gpio_state & (~val);
+
+    // On button push, latch the current cycle count
+    if (falling & IO_ENC_SW)
+        cycle_enc_sw = cycles;
+    if (falling & IO_BACK_SW)
+        cycle_back_sw = cycles;
+
+    // Set instantaneous button state in [1, 0]
+    button_flags &= ~0x3;
+    if (!(val & IO_ENC_SW))
+        button_flags |= (1 << 0);
+    if (!(val & IO_BACK_SW))
+        button_flags |= (1 << 1);
+
+    // On release, check if it was a long [5, 4] or a short press [3, 2]
+    // and set the bits in button_flags accordingly
+    if (rising & IO_ENC_SW) {
+        if ((cycles - cycle_enc_sw) < T_LONG)
+            button_flags |= (1 << 2);
+        else
+            button_flags |= (1 << 4);
+    }
+    if (rising & IO_BACK_SW) {
+        if ((cycles - cycle_back_sw) < T_LONG)
+            button_flags |= (1 << 3);
+        else
+            button_flags |= (1 << 5);
+    }
 
     // # Rotary encoder
     static int8_t enc_acc = 0, enc_d = 0;
@@ -135,12 +156,6 @@ void ui_board_poll() {
     }
     enc_d = enc;
     gpio_state = val;
-
-    button_flags &= 3;
-    if (val & IO_ENC_SW)
-        button_flags |= 1;
-    if (val & IO_BACK_SW)
-        button_flags |= 2;
 }
 
 void ui_init(void) {
@@ -155,17 +170,18 @@ void ui_init(void) {
     mcp23_write8(MCP23_IOCON, INTPOL | DISSLW | SEQOP | MIRROR);
     // GPIO direction
     mcp23_write16(MCP23_IODIR, IO_ENC_A | IO_ENC_B | IO_ENC_SW | IO_BACK_SW | IO_NC);
+    // GPIO value
+    mcp23_write16(MCP23_OLAT, OLAT_RESET);
+    output_value = OLAT_RESET;
+    output_value_new = OLAT_RESET;
     // enable interrupts for switches and encoder
     mcp23_write16(MCP23_GPINTEN, IO_ENC_A | IO_ENC_B | IO_ENC_SW | IO_BACK_SW);
     // interrupt on any input change
     mcp23_write16(MCP23_INTCON, 0);
 
-    output_value = 0;
-    set_leda(0);
-    set_ledb(0);
-
     // # Init the OLED
     init_ssd1322();
+    clear_fb();
 }
 
 int get_encoder_ticks(bool reset) {
@@ -177,7 +193,7 @@ int get_encoder_ticks(bool reset) {
 
 unsigned get_button_flags(void) {
     unsigned ret = button_flags;
-    // button_flags &= 0x3;  // clear the button-push event flags
+    button_flags &= 0x3;  // clear the long / short event flags
     return ret;
 }
 
