@@ -4,8 +4,8 @@
 
 As of now there are 2 hardware revisions of ui_to_usb:
 
-  1. __Rev: -__: based on a FTDI FT232H, which doesn't have programmable firmware and makes the host PC suffer from performance issues when polling the rotary encoder at high speeds. There is an [experimental python library](py_ui_board/util), which besides the aforementioned flaw works well.
-  2. __Rev: 1__: based on a CH32V203 USB capable microcontroller. This repo contains the firmware and user-space library for this board.
+  1. __Rev: -__: based on a FTDI FT232H, which doesn't have programmable firmware and makes the host PC suffer from performance issues when polling the rotary encoder at high speeds. There is an [experimental python library](py_ui_board/py_ui_board/ft232h.py), which besides the aforementioned flaw works well.
+  2. __Rev: 1__: based on a CH32V203 USB capable microcontroller. This repo contains the firmware and user-space [library](py_ui_board/py_ui_board/ch32.py) for this board.
 
 ## USB interface
 The USB support is based on the excellent TinyUSB library.

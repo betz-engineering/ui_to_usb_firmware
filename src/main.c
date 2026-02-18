@@ -147,12 +147,12 @@ int main(void) {
     SystemInit();
     peripherals_init();
 
-    SDI_Printf_Enable();
+    // SDI_Printf_Enable();
     SysTick_Config(SystemCoreClock / 1000);
     __enable_irq();
 
-    delay_ms(1000);
-    puts("Hi, this is ui_to_usb firmware!\n");
+    // delay_ms(1000);
+    // puts("Hi, this is ui_to_usb firmware!\n");
 
     // Init tiny-USB
     tud_init(BOARD_TUD_RHPORT);

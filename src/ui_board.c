@@ -81,6 +81,7 @@ static const int8_t enc_table[16] = {0, -1, 1, 0, 1, 0, 0, -1, -1, 0, 0, 1, 0, 1
 
 void ui_board_poll() {
     static unsigned cycle_enc_sw = 0, cycle_back_sw = 0;
+    static bool is_init = false;
 
     // Read clock cycle counter
     unsigned cycles = millis();
@@ -119,17 +120,19 @@ void ui_board_poll() {
 
     // On release, check if it was a long [5, 4] or a short press [3, 2]
     // and set the bits in button_flags accordingly
-    if (rising & IO_ENC_SW) {
-        if ((cycles - cycle_enc_sw) < T_LONG)
-            button_flags |= (1 << 2);
-        else
-            button_flags |= (1 << 4);
-    }
-    if (rising & IO_BACK_SW) {
-        if ((cycles - cycle_back_sw) < T_LONG)
-            button_flags |= (1 << 3);
-        else
-            button_flags |= (1 << 5);
+    if (is_init) {
+        if (rising & IO_ENC_SW) {
+            if ((cycles - cycle_enc_sw) < T_LONG)
+                button_flags |= (1 << 2);
+            else
+                button_flags |= (1 << 4);
+        }
+        if (rising & IO_BACK_SW) {
+            if ((cycles - cycle_back_sw) < T_LONG)
+                button_flags |= (1 << 3);
+            else
+                button_flags |= (1 << 5);
+        }
     }
 
     // # Rotary encoder
@@ -144,7 +147,10 @@ void ui_board_poll() {
     // Decode current and previous encoder state with a 4 bit lookup table, accumulate steps
     // The encoder makes 4 electrical steps / detent.
     // so the actual useful value is enc_sum >> 2. The LSB may jitter due to switch bouncing.
-    enc_sum += enc_table[(enc_d << 2) | enc];
+    if (is_init)
+        enc_sum += enc_table[(enc_d << 2) | enc];
+    else
+        is_init = true;
 
     enc_d = enc;
     gpio_state = val;
