@@ -125,24 +125,24 @@ uint8_t spi_rxtx(uint8_t byteToSend) {
     return SPI_I2S_ReceiveData(SPI1);
 }
 
-static void print_state() {
-    static int enc_ = 0;
-    static uint8_t bf_ = 0;
+// static void print_state() {
+//     static int enc_ = 0;
+//     static uint8_t bf_ = 0;
 
-    int enc = get_encoder_ticks(false);
-    if (enc != enc_) {
-        printf("enc: %d\n", enc);
-        enc_ = enc;
-    }
-    int bf = get_button_flags();
-    if (bf != bf_) {
-        printf("btn: ");
-        for (int b = 5; b >= 0; b--)
-            printf(((1 << b) & bf) ? "1" : "0");
-        printf("\n");
-        bf_ = bf;
-    }
-}
+//     int enc = get_encoder_ticks(false);
+//     if (enc != enc_) {
+//         printf("enc: %d\n", enc);
+//         enc_ = enc;
+//     }
+//     int bf = get_button_flags();
+//     if (bf != bf_) {
+//         printf("btn: ");
+//         for (int b = 5; b >= 0; b--)
+//             printf(((1 << b) & bf) ? "1" : "0");
+//         printf("\n");
+//         bf_ = bf;
+//     }
+// }
 
 // Call this in your main loop
 int main(void) {
@@ -155,6 +155,12 @@ int main(void) {
     // SDI_Printf_Enable();
     SysTick_Config(SystemCoreClock / 1000);
     __enable_irq();
+
+    // Blink the LED on boot
+    for (unsigned i=0; i<6; i++) {
+        GPIO_WriteBit(GPIOA, PIN_LED, i & 1);
+        delay_ms(30);
+    }
 
     // delay_ms(1000);
     // puts("Hi, this is ui_to_usb firmware!\n");
