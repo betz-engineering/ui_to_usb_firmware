@@ -5,7 +5,21 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "py_ui_board"
 version = "0.0.1"
+description = "Python library for the ui_board supporting Rev: - and Rev: 1"
+readme = "README.md"
+requires-python = ">=3.8"
 dependencies = ["pyusb", "pillow", "numpy", "aggdraw"]
+
+[project.scripts]
+# This creates a CLI command for demo purposes
+ui_demo = "py_ui_board.ui_demo:main"
+
+[tool.setuptools]
+# Explicitly include only the main package
+packages = ["py_ui_board"]
+
+[tool.setuptools.package-data]
+py_ui_board = ["*.bdf"]
 
 [tool.pyright]
 reportOptionalMemberAccess = "warning"
@@ -18,3 +32,4 @@ reportWildcardImportFromLibrary = "error"
 
 [tool.black]
 line-length = 120
+

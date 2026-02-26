@@ -53,6 +53,23 @@ class B_IOCON(IntFlag):
     INTPOL = 1 << 1  # active high interrupt pin
 
 
+class BUTTONS(IntFlag):
+    """Encoding of the get_inputs return value.
+    There are 2 buttons on the ui_board: the encoder and the small yellow back button.
+    ENC_STATE and BACK_STATE show if they are currently pressed or not.
+    ENC_SHORT and BACK_SHORT indicate that a short press and release event happened
+    since the last call
+    ENC_LONG and BACK_LONG indicate that a > 0.5 s press and release event happened
+    """
+
+    ENC_STATE = 1 << 0
+    BACK_STATE = 1 << 1
+    ENC_SHORT = 1 << 2
+    BACK_SHORT = 1 << 3
+    ENC_LONG = 1 << 4
+    BACK_LONG = 1 << 5
+
+
 class Mcp23:
     OPCODE_W = 0x40
     OPCODE_R = 0x41
@@ -181,6 +198,7 @@ class Mcp23:
         self.io_state = io_state
 
     def start_poll_thread(self, t_delay=5e-3):
+        # TODO shared access bug when calling set_inverted / set_led / send_fb, etc.
         if self.t_is_running:
             raise RuntimeError("thread already running")
 
@@ -193,7 +211,7 @@ class Mcp23:
                 i += 1
                 time.sleep(t_delay)
 
-        self.t = threading.Thread(target=loop)
+        self.t = threading.Thread(target=loop, daemon=True)
         self.t.start()
 
     def stop_poll_thread(self):
@@ -208,13 +226,13 @@ class Mcp23:
         if reset is false, returns accumulated encoder ticks
         if reset is true, returns difference to last call
         """
-        tmp = self.enc_sum
+        tmp = self.enc_sum // 4
         ret = tmp - self.last_ticks
 
         if reset:
             self.last_ticks = tmp
 
-        return ret >> 2
+        return ret
 
     def get_button_flags(self):
         """returns flags indicating button event
@@ -222,9 +240,9 @@ class Mcp23:
         events of the encoder and back-button:
         {back_long_press, enc_long_press, back_short_press, enc_short_press, back, enc},
         the press-events get cleared automatically on returning from this function."""
-        ret = self.button_flags
-        self.button_flags &= 0x3
-        return ret
+        tmp = self.button_flags
+        self.button_flags &= 3
+        return BUTTONS(tmp)
 
     def get_inputs(self):
         """return state of user inputs since last call: button_flags, encoder_delta

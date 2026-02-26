@@ -1,5 +1,6 @@
 """User-space library for the ui_to_usb Rev: 1  based on Ch32V203"""
-from enum import IntEnum
+from .ft232h import BUTTONS
+from enum import IntEnum, IntFlag
 from PIL import Image
 import numpy as np
 import struct
@@ -86,13 +87,12 @@ class UiBoard:
     def get_inputs(self):
         """return state of user inputs since last call: button_flags, encoder_delta
         Call this for every frame of the GUI main-loop
-        button_flags indicates button events since last call:
-            {BTN1_LONG, BTN0_LONG, BTN1_SHORT, BTN0_SHORT, BTN1_STATE, BTN0_STATE}
+        button_flags indicates button events since last call as BUTTONS enum.
         encoder_delta is the number of ticks since last call (sign indicates direction)
         """
         data = self.dev.ctrl_transfer(REQ.D2H, CMD.BTNS_ENC, 0, 0, 2)
-        button_flags, encoder_delta = struct.unpack("cb", data)
-        return button_flags, encoder_delta
+        button_flags, encoder_delta = struct.unpack("Bb", data)
+        return BUTTONS(button_flags), int(encoder_delta)
 
     def send_fb(self, buf: bytes):
         # Send a frame-buffer to the OLED display
