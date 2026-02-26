@@ -170,7 +170,6 @@ int main(void) {
 
     ui_init();
 
-    unsigned i = 0;
     while (1) {
         ui_board_poll();
         tud_task();
