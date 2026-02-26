@@ -72,7 +72,12 @@ static void peripherals_init(void) {
 
     // Inputs
     gpio.GPIO_Mode = GPIO_Mode_IPU;
-    gpio.GPIO_Pin = PIN_INT_IO | PIN_SDI;
+    gpio.GPIO_Pin = PIN_SDI;
+    gpio.GPIO_Speed = GPIO_Speed_50MHz;
+    GPIO_Init(GPIOA, &gpio);
+
+    gpio.GPIO_Mode = GPIO_Mode_IPD;
+    gpio.GPIO_Pin = PIN_INT_IO;
     gpio.GPIO_Speed = GPIO_Speed_50MHz;
     GPIO_Init(GPIOA, &gpio);
 
@@ -159,6 +164,7 @@ int main(void) {
 
     ui_init();
 
+    unsigned i = 0;
     while (1) {
         ui_board_poll();
         tud_task();

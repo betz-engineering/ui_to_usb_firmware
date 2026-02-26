@@ -78,7 +78,7 @@ void vendor_task(void) {
             }
         }
     }
-    GPIO_WriteBit(GPIOA, PIN_LED, !(activity_count & (1 << 6)));
+    GPIO_WriteBit(GPIOA, PIN_LED, !(activity_count & (1 << 4)));
 }
 
 // Command IDs

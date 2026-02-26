@@ -93,13 +93,11 @@ void ui_board_poll() {
 
     // Skip reading IO state if the INT_ON_CHANGE pin is low (no change)
     if (!GPIO_ReadInputDataBit(GPIOA, PIN_INT_IO)) {
-        printf("no int\n");
         return;
     }
 
     // Read the MCP23 IO pin state
     const unsigned val = mcp23_read16(MCP23_GPIO);
-    printf("MCP23_GPIO: %x\n", val);
 
     // decode buttons states (rising or falling edge of the input signal)
     unsigned rising = (~gpio_state) & val;
@@ -184,13 +182,13 @@ void ui_init(void) {
 
 int get_encoder_ticks(bool reset) {
     static int last_ticks = 0;
-    int tmp = enc_sum;
+    int tmp = enc_sum / 4;
     int ret = tmp - last_ticks;
 
     if (reset)
         last_ticks = tmp;
 
-    return ret >> 2;
+    return ret;
 }
 
 unsigned get_button_flags(void) {
