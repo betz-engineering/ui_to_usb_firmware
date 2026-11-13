@@ -1,4 +1,5 @@
 """User-space library for the ui_to_usb Rev: 1  based on Ch32V203"""
+
 from .ft232h import BUTTONS
 from enum import IntEnum, IntFlag
 from PIL import Image
@@ -48,6 +49,15 @@ class CMD(IntEnum):
     OLED_INVERTED = 0x32
 
 
+# // This library supports both:
+# //   * legacy ui_board, dual color LED, no back button, using 8-bit MCP23S08
+# //   * ui_board_1u, 2x RGB LED, back button, using 16 bit MCP23S17
+class BOARD_TYPE(IntEnum):
+    UI_BOARD = 0
+    UI_BOARD_1U = 1
+    UI_BOARD_1U_291V = 2
+
+
 class UiBoard:
     def __init__(self, dev: usb.core.Device | None = None):
         if dev is None:
@@ -56,8 +66,8 @@ class UiBoard:
         dev.set_configuration()
         self.led_state = 0  # {0, LEDB_B, LEDB_G, LEDB_R, 0, LEDA_B, LEDA_G, LEDA_R,}
 
-    def reset(self):
-        self.dev.ctrl_transfer(REQ.H2D, CMD.RESET, 0, 0)
+    def reset(self, board_type=BOARD_TYPE.UI_BOARD_1U):
+        self.dev.ctrl_transfer(REQ.H2D, CMD.RESET, board_type, 0)
 
     def set_led(self, leda=None, ledb=None):
         """set the LED color. Value is from 0 - 7"""

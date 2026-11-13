@@ -4,6 +4,7 @@
 #include "ch32v20x_spi.h"
 #include "core_riscv.h"
 #include "debug.h"
+#include "hardware_interface.h"
 #include "system_ch32v20x.h"
 #include "tusb.h"
 #include "ui_board.h"
@@ -11,6 +12,9 @@
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
+
+// Min. duration for a long-press event: 500 ms
+const unsigned ui_t_long_press = 500;
 
 // -----------------------------
 //  Systick interrupt
@@ -115,8 +119,11 @@ static void peripherals_init(void) {
     // RCC_AHBPeriphClockCmd(RCC_AHBPeriph_USBFS, ENABLE);  // USBFS (port 1)
 }
 
+// --------------------------------
+//  Interface to the ui_board
+// --------------------------------
 // Helper function to exchange one byte
-uint8_t spi_rxtx(uint8_t byteToSend) {
+uint8_t ui_spi_rx_tx(uint8_t byteToSend) {
     SPI_I2S_SendData(SPI1, byteToSend);
     while (SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_BSY))
         ;
@@ -124,6 +131,17 @@ uint8_t spi_rxtx(uint8_t byteToSend) {
     // Return the received data (and clear the RXNE flag)
     return SPI_I2S_ReceiveData(SPI1);
 }
+
+void ui_set_cs_n(t_ui_cs_n val) {
+    GPIO_WriteBit(GPIOA, PIN_CS_IO_N, val == SELECT_MCP ? 0 : 1);
+    GPIO_WriteBit(GPIOA, PIN_CS_OLED_N, val == SELECT_OLED ? 0 : 1);
+}
+
+void ui_set_dc(bool val) { GPIO_WriteBit(GPIOA, PIN_D_C, val); }
+
+bool ui_get_int(void) { return GPIO_ReadInputDataBit(GPIOA, PIN_INT_IO); }
+
+unsigned ui_get_cycles(void) { return millis(); }
 
 // static void print_state() {
 //     static int enc_ = 0;
@@ -144,7 +162,6 @@ uint8_t spi_rxtx(uint8_t byteToSend) {
 //     }
 // }
 
-// Call this in your main loop
 int main(void) {
     __disable_irq();
 
@@ -157,7 +174,7 @@ int main(void) {
     __enable_irq();
 
     // Blink the LED on boot
-    for (unsigned i=0; i<6; i++) {
+    for (unsigned i = 0; i < 6; i++) {
         GPIO_WriteBit(GPIOA, PIN_LED, i & 1);
         delay_ms(30);
     }
@@ -168,10 +185,10 @@ int main(void) {
     // Init tiny-USB
     tud_init(BOARD_TUD_RHPORT);
 
-    ui_init();
+    ui_init(UI_BOARD_1U);
 
     while (1) {
-        ui_board_poll();
+        ui_board_poll(false);
         tud_task();
         vendor_task();
         // print_state();

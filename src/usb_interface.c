@@ -113,7 +113,7 @@ bool tud_vendor_control_xfer_cb(uint8_t rhport,
     if (stage == CONTROL_STAGE_SETUP) {
         switch (request->bRequest) {
         case CMD_RESET:
-            ui_init();
+            ui_init(request->wValue);  // 0: UI_BOARD, 1: UI_BOARD_1U
             // ACK the transfer (no data stage needed)
             return tud_control_status(rhport, request);
 
@@ -122,11 +122,12 @@ bool tud_vendor_control_xfer_cb(uint8_t rhport,
             return tud_control_xfer(rhport, request, (void *)fw_version, strlen(fw_version));
 
         case CMD_IO_LEDS:
-            set_leds(request->wValue);
+            set_leda(request->wValue & 0xF);
+            set_ledb((request->wValue >> 4) & 0xF);
             return tud_control_status(rhport, request);
 
         case CMD_BTNS_ENC:
-            packet.button_flags = get_button_flags();
+            packet.button_flags = get_event_flags();
             packet.encoder_delta = get_encoder_ticks(true);
             activity_count++;
             return tud_control_xfer(rhport, request, (void *)&packet, sizeof(packet));
