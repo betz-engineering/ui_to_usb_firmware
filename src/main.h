@@ -16,3 +16,5 @@
 unsigned millis(void);
 void delay_ms(unsigned val);
 uint8_t spi_rxtx(uint8_t byteToSend);
+
+void reset_ui(void);

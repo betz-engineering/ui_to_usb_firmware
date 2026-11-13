@@ -223,10 +223,13 @@ bool ui_board_poll(bool new_frame) {
     return false;
 }
 
+static int processed_ticks = 0;
+
 void ui_init(t_ui_board_type value) {
     board_type = value;
     enc_sum = 0;
     event_flags = 0;
+    processed_ticks = 0;
 
     // Use _banked_ register access on the MCP23S17, for compatibility with MCP23S08
     mcp23_write8(MCP23_IOCON_INTERLEAVED, INTPOL | DISSLW | SEQOP | BANK);
@@ -250,8 +253,6 @@ void ui_init(t_ui_board_type value) {
     set_ledb(0);
     set_leda(0);
 }
-
-static int processed_ticks = 0;
 
 int get_encoder_ticks(bool reset) {
     static int last_ticks = 0;

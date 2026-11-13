@@ -113,6 +113,7 @@ bool tud_vendor_control_xfer_cb(uint8_t rhport,
     if (stage == CONTROL_STAGE_SETUP) {
         switch (request->bRequest) {
         case CMD_RESET:
+            reset_ui();
             ui_init(request->wValue);  // 0: UI_BOARD, 1: UI_BOARD_1U
             // ACK the transfer (no data stage needed)
             return tud_control_status(rhport, request);

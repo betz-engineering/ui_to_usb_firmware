@@ -162,6 +162,16 @@ unsigned ui_get_cycles(void) { return millis(); }
 //     }
 // }
 
+void reset_ui() {
+    // Reset MCP
+    GPIO_WriteBit(GPIOA, PIN_RES_N, 0);
+    delay_ms(10);
+
+    // Release Reset of MCP
+    GPIO_WriteBit(GPIOA, PIN_RES_N, 1);
+    delay_ms(10);
+}
+
 int main(void) {
     __disable_irq();
 
@@ -185,6 +195,7 @@ int main(void) {
     // Init tiny-USB
     tud_init(BOARD_TUD_RHPORT);
 
+    reset_ui();
     ui_init(UI_BOARD_1U);
 
     while (1) {
