@@ -251,14 +251,18 @@ void ui_init(t_ui_board_type value) {
     set_leda(0);
 }
 
+static int processed_ticks = 0;
+
 int get_encoder_ticks(bool reset) {
     static int last_ticks = 0;
     int tmp = enc_sum;
 
     int ret = tmp - last_ticks;
 
-    if (reset)
+    if (reset) {
         last_ticks = tmp;
+        processed_ticks = 0;
+    }
 
     // Electrical steps / tick is 4 times higher for ui_board_1u
     if (board_type == UI_BOARD_1U)
@@ -269,7 +273,6 @@ int get_encoder_ticks(bool reset) {
 
 // Converts the encoder number into a series of left / right events
 static unsigned get_rotate_events(void) {
-    static int processed_ticks = 0;
     unsigned flags = 0;
     int ticks = get_encoder_ticks(false);
 

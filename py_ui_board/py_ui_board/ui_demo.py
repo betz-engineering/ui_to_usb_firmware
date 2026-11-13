@@ -2,13 +2,14 @@
 Demo app to to test the ui_board OLED, encoder, buttons and LEDs. Connect via ui_to_usb.
 Revisions Rev: - and Rev: 1 are supported.
 """
+
 import argparse
-from py_ui_board.gui_primitives import GuiPrimitives, load_img
-from py_ui_board.ft232h import BUTTONS
-from PIL import Image, ImageFont, ImageDraw
-import numpy as np
-from time import sleep
 from pathlib import Path
+from time import sleep
+
+from PIL import Image, ImageDraw, ImageFont
+from py_ui_board.ch32 import BOARD_TYPE, EV
+from py_ui_board.gui_primitives import GuiPrimitives
 
 script_path = Path(__file__).resolve()
 
@@ -19,7 +20,12 @@ colors = ["Bk", "Rd", "Gn", "Ye", "Bu", "Vt", "Tq", "Wh"]
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--rev", choices=["-", "1"], default="1", help="Revision of the ui_to_usb board. default: 1")
+    parser.add_argument(
+        "--rev",
+        choices=["-", "1"],
+        default="1",
+        help="Revision of the ui_to_usb board. default: 1",
+    )
     args = parser.parse_args()
 
     if args.rev == "1":
@@ -40,29 +46,35 @@ def main():
     if args.rev == "1":
         print("Firmware version:", ui.get_fw_version())
 
-    encoder_value = 0
     frame = 0
     is_inverted = False
+    is_ui_1u = True
 
     print("\nRunning demo, CTRL+C to quit ...")
+    reset = False
     while True:
-        btns, e = ui.get_inputs()
+        events, encoder_value = ui.get_inputs(reset)
+        reset = EV.ENC_S in events
 
         # Handle button presses
-        if btns:
-            print(repr(btns))
+        if events:
+            print(repr(events))
 
-        if btns & BUTTONS.ENC_SHORT:
-            e = -encoder_value
+        if events & EV.ENC_L:
+            is_ui_1u = not is_ui_1u
+            if is_ui_1u:
+                print("Initializing for ui_board_1u")
+                ui.reset(BOARD_TYPE.UI_BOARD_1U)
+            else:
+                print("Initializing for ui_board")
+                ui.reset(BOARD_TYPE.UI_BOARD)
 
-        if btns & BUTTONS.BACK_LONG:
+        if events & EV.BACK_L:
             print("Inverting screen.")
             is_inverted = not is_inverted
             ui.set_inverted(is_inverted)
 
-        if e != 0 or frame == 0:
-            encoder_value += e
-
+        if events != 0 or frame == 0:
             img = Image.new("L", (256, 64), color=0)
 
             dr = ImageDraw.Draw(img)
@@ -78,7 +90,9 @@ def main():
             g.dot(128, 22, 40, outline=5, linewidth=4, fill=0)
             g.dot(120, 15, 10, outline=15)
             g.dot(136, 15, 10, outline=15)
-            g.rectangle(128 + encoder_value, 30 + encoder_value, w=20, h=4, r=2, fill=15)
+            g.rectangle(
+                128 + encoder_value, 30 + encoder_value, w=20, h=4, r=2, fill=15
+            )
 
             # Dot-bar indicating which screen is on
             g.dot_bar(encoder_value + 3, r=3, N=6)
@@ -95,8 +109,20 @@ def main():
             dr.text((44, 22), colors[ledb_val], fill=255, anchor="mm", font=F_CREEP)
 
             # Text / icons
-            dr.text((128, 62), f"Hello {encoder_value} World", fill=255, anchor="ms", font=F_BIG)
-            dr.text((165, 12), "Smaller text\nlooks like\nthis!!!", fill=255, anchor="ls", font=F_CREEP)
+            dr.text(
+                (128, 62),
+                f"Hello {encoder_value} World",
+                fill=255,
+                anchor="ms",
+                font=F_BIG,
+            )
+            dr.text(
+                (165, 12),
+                "Smaller text\nlooks like\nthis!!!",
+                fill=255,
+                anchor="ls",
+                font=F_CREEP,
+            )
 
             ui.send_img(img)
         sleep(30e-3)

@@ -1,7 +1,9 @@
 """User-space library for the ui_to_usb Rev: -  based on FT232H
+!!! OBSOLETE !!!
 Note that the FT232H has major problems polling the encoder fast enough, especially
 while the framebuffer is written. Try to use Rev: 1 of the hardware if possible.
 """
+
 from enum import IntEnum, IntFlag
 import threading
 from pyftdi.spi import SpiController, SpiGpioPort, SpiPort
@@ -94,12 +96,26 @@ class Mcp23:
 
         # A special mode (Byte mode with IOCON.BANK = 0) causes the address pointer
         # to toggle between associated A/B register pairs.
-        self.mcp_write(R_MCP.IOCON, int(B_IOCON.INTPOL | B_IOCON.DISSLW | B_IOCON.SEQOP | B_IOCON.MIRROR), 1)
+        self.mcp_write(
+            R_MCP.IOCON,
+            int(B_IOCON.INTPOL | B_IOCON.DISSLW | B_IOCON.SEQOP | B_IOCON.MIRROR),
+            1,
+        )
         # Disable LEDS
-        self.o_val = int(B_IO.LEDA_R | B_IO.LEDA_G | B_IO.LEDA_B | B_IO.LEDB_R | B_IO.LEDB_G | B_IO.LEDB_B)
+        self.o_val = int(
+            B_IO.LEDA_R
+            | B_IO.LEDA_G
+            | B_IO.LEDA_B
+            | B_IO.LEDB_R
+            | B_IO.LEDB_G
+            | B_IO.LEDB_B
+        )
         self.mcp_write(R_MCP.OLAT, self.o_val)
         # GPIO direction
-        self.mcp_write(R_MCP.IODIR, int(B_IO.ENC_A | B_IO.ENC_B | B_IO.ENC_SW | B_IO.BACK_SW | B_IO.NC))
+        self.mcp_write(
+            R_MCP.IODIR,
+            int(B_IO.ENC_A | B_IO.ENC_B | B_IO.ENC_SW | B_IO.BACK_SW | B_IO.NC),
+        )
 
     def mcp_write(self, addr: int, val: int | bytes, txlen=2):
         if isinstance(val, int):
@@ -110,7 +126,9 @@ class Mcp23:
 
     def mcp_read16(self, addr: int):
         self.gpio.write(0x90)  # CS_IO = 0
-        dat = self.p.exchange(bytes([Mcp23.OPCODE_R, addr]), readlen=2, start=False, stop=False)
+        dat = self.p.exchange(
+            bytes([Mcp23.OPCODE_R, addr]), readlen=2, start=False, stop=False
+        )
         self.gpio.write(0xB0)  # CS_IO = 1
         return dat
 

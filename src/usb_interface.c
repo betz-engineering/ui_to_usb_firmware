@@ -12,8 +12,8 @@
 
 // Struct for Device -> Host (Input)
 typedef struct __attribute__((packed)) {
-    uint8_t button_flags;  // Bit 0: Btn1, Bit 1: Btn2
-    int8_t encoder_delta;  // Relative delta since last send
+    uint32_t event_flags;   // Bit 0: Btn1, Bit 1: Btn2
+    int32_t encoder_value;  // Absolute encoder value since boot
 } input_packet_t;
 
 #define FRAME_SIZE 8192
@@ -127,8 +127,8 @@ bool tud_vendor_control_xfer_cb(uint8_t rhport,
             return tud_control_status(rhport, request);
 
         case CMD_BTNS_ENC:
-            packet.button_flags = get_event_flags();
-            packet.encoder_delta = get_encoder_ticks(true);
+            packet.event_flags = get_event_flags();
+            packet.encoder_value = get_encoder_ticks(request->wValue & 1);
             activity_count++;
             return tud_control_xfer(rhport, request, (void *)&packet, sizeof(packet));
 

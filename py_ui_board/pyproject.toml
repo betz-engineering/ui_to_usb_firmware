@@ -8,7 +8,7 @@ version = "0.0.1"
 description = "Python library for the ui_board supporting Rev: - and Rev: 1"
 readme = "README.md"
 requires-python = ">=3.8"
-dependencies = ["pyusb", "pillow", "numpy", "aggdraw"]
+dependencies = ["pyusb", "pillow", "numpy", "aggdraw", "pyftdi"]
 
 [project.scripts]
 # This creates a CLI command for demo purposes

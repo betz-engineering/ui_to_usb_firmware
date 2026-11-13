@@ -1,12 +1,34 @@
 """User-space library for the ui_to_usb Rev: 1  based on Ch32V203"""
 
-from .ft232h import BUTTONS
 from enum import IntEnum, IntFlag
 from PIL import Image
 import numpy as np
 import struct
 import usb.core
 import usb.util
+
+
+from enum import IntFlag
+
+
+class EV(IntFlag):
+    # Meaning of the bits in the value returned by get_event_flags()
+    # It indicates which events happened since the last call
+    # Instantaneous value (1 = pushed)
+    ENC = 1 << 0  # encoder button
+    BACK = 1 << 1  # back button
+    # On push
+    ENC_P = 1 << 4
+    BACK_P = 1 << 5
+    # Short push and release
+    ENC_S = 1 << 8
+    BACK_S = 1 << 9
+    # Long push
+    ENC_L = 1 << 12
+    BACK_L = 1 << 13
+    # Encoder ticks. Alternative to get_encoder_ticks()
+    ROT_CCW = 1 << 16
+    ROT_CW = 1 << 17
 
 
 def find_ui_board_devices():
@@ -94,15 +116,15 @@ class UiBoard:
         data = self.dev.ctrl_transfer(REQ.D2H, CMD.VERSION, 0, 0, 64)
         return data.tobytes().decode("utf-8")
 
-    def get_inputs(self):
-        """return state of user inputs since last call: button_flags, encoder_delta
+    def get_inputs(self, reset_encoder=False):
+        """return state of user inputs since last call: event_flags, encoder_value
         Call this for every frame of the GUI main-loop
-        button_flags indicates button events since last call as BUTTONS enum.
-        encoder_delta is the number of ticks since last call (sign indicates direction)
+        event_flags indicates button events since last call as BUTTONS enum.
+        encoder_value is the number of ticks since last call (sign indicates direction)
         """
-        data = self.dev.ctrl_transfer(REQ.D2H, CMD.BTNS_ENC, 0, 0, 2)
-        button_flags, encoder_delta = struct.unpack("Bb", data)
-        return BUTTONS(button_flags), int(encoder_delta)
+        data = self.dev.ctrl_transfer(REQ.D2H, CMD.BTNS_ENC, reset_encoder, 0, 8)
+        event_flags, encoder_value = struct.unpack("Ii", data)
+        return EV(event_flags), encoder_value
 
     def send_fb(self, buf: bytes):
         # Send a frame-buffer to the OLED display
