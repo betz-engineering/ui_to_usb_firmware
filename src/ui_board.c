@@ -122,7 +122,7 @@ void mcp23_isr(void) {
         unsigned buttons = 0;
         if ((val & IO_ENC_SW) == 0)
             buttons |= 1;
-        if ((val & IO_BACK_SW) == 0)
+        if (board_type != UI_BOARD && (val & IO_BACK_SW) == 0)
             buttons |= 2;
 
         // Don't send any events in the first iteration
