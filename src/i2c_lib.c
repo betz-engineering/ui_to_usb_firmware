@@ -12,7 +12,7 @@ typedef enum { I2C_IDLE, I2C_START, I2C_BYTE, I2C_STOP } i2c_state_t;
 typedef enum { K_WRITE, K_RADDR, K_RDATA } byte_kind_t;
 
 static volatile i2c_state_t state;
-static volatile unsigned error;
+static volatile i2c_err_t error;
 static unsigned phase;     // tick within the current START / bit / STOP
 static unsigned bit_idx;   // 0..8 within the current byte
 static byte_kind_t kind;   // what kind of byte is processed right now
@@ -77,14 +77,34 @@ bool i2c_start_xfer(
     wait = 0;
     state = I2C_START;
 
-    // Enable timer interrupt here
+    TIM2->CTLR1 |= TIM_CEN;  // start ticking, stops again once IDLE
     return true;
 }
 
-int i2c_result(void) { return state == I2C_IDLE ? error : -1; }
+// f_scl is the I2C clock frequency. Setup TIM2 to get 4 interrupts per period.
+// clamped to: f_scl_min = 550 Hz, f_scl_max = 400 kHz
+void i2c_timer_init(unsigned f_scl) {
+    unsigned reload = SystemCoreClock / (4 * f_scl);
+    if (reload < 90)
+        reload = 90;
+    reload -= 1;
+    if (reload > 0xFFFF)
+        reload = 0xFFFF;
+
+    RCC->APB1PCENR |= RCC_TIM2EN;
+    TIM2->CTLR1 = 0;  // counter off until a transfer starts
+    TIM2->PSC = 0;
+    TIM2->ATRLR = reload;  // must fit 16 bit: f_scl >= 550 Hz at 144 MHz
+    TIM2->INTFR = 0;
+    TIM2->DMAINTENR = TIM_UIE;
+    NVIC_SetPriority(TIM2_IRQn, 0);  // highest priority: keeps SCL timing jitter low
+    NVIC_EnableIRQ(TIM2_IRQn);
+}
+
+i2c_err_t i2c_result(void) { return state == I2C_IDLE ? error : -1; }
 
 // Abort: release both lines and go idle
-static void finish(unsigned err) {
+static void finish(i2c_err_t err) {
     error = err;
     SDA_HIGH();
     SCL_HIGH();
@@ -143,11 +163,11 @@ static void byte_done(void) {
         state = I2C_STOP;
 }
 
-void i2c_timer_isr(void) {
+static void i2c_timer_isr(void) {
     switch (state) {
 
     case I2C_IDLE:
-        // Optionally disable timer interrupt here to save CPU
+        TIM2->CTLR1 &= ~TIM_CEN;  // nothing to do, stop the timer
         return;
 
     // (repeated) START: SDA falls while SCL is high. Entered with SCL low or bus idle.
@@ -226,4 +246,9 @@ void i2c_timer_isr(void) {
         break;
     }
     phase++;
+}
+
+__attribute__((interrupt)) __attribute__((used)) void TIM2_IRQHandler(void) {
+    TIM2->INTFR = ~TIM_UIF;  // clear update flag (write 0 clears)
+    i2c_timer_isr();
 }

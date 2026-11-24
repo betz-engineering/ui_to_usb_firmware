@@ -1,6 +1,7 @@
 #include "ch32v20x.h"
 #include "ch32v20x_gpio.h"
 #include "ch32v20x_spi.h"
+#include "i2c_lib.h"
 #include "main.h"
 #include "ssd1322.h"
 #include "tusb.h"
@@ -142,6 +143,19 @@ bool tud_vendor_control_xfer_cb(uint8_t rhport,
         case CMD_OLED_INVERTED:
             set_inverted(request->wValue);
             return tud_control_status(rhport, request);
+
+        case CMD_I2C_CONFIG:
+            // TODO STALL on invalid parameters
+            // wValue has the pin numbers (4 bit each)
+            // wIndex has the SCL frequency in kHz
+            i2c_gpio_init(request->wValue & 0xF, (request->wValue >> 4) & 0xF);
+            i2c_timer_init(((unsigned)request->wIndex) * 1000);
+            return tud_control_status(rhport, request);
+
+            // case CMD_I2C_TRANSACTION:
+            // TODO check and store wLength
+            //     i2c_start_xfer(uint8_t addr, const uint8_t *tx, size_t tx_len, uint8_t *rx,
+            //     size_t rx_len);
 
         default:
             // Unknown RPC -> STALL (Python will raise USBError)
