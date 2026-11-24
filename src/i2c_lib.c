@@ -44,9 +44,9 @@ static unsigned sda_pin_mask = (1 << 7);
 #define SDA_READ() ((GPIOB->INDR & sda_pin_mask) != 0)
 
 // PORTB 0 to 7 is supported
-void i2c_gpio_init(unsigned scl_pin_id, unsigned sda_pin_id) {
+bool i2c_gpio_init(unsigned scl_pin_id, unsigned sda_pin_id) {
     if (scl_pin_id > 7 || sda_pin_id > 7)
-        return;
+        return false;
 
     scl_pin_mask = (1 << scl_pin_id);
     sda_pin_mask = (1 << sda_pin_id);
@@ -58,19 +58,17 @@ void i2c_gpio_init(unsigned scl_pin_id, unsigned sda_pin_id) {
     //    (Use CFGLR for pins 0..7, CFGHR for pins 8..15)
     GPIOB->CFGLR &= ~((0xF << (scl_pin_id * 4)) | (0xF << (sda_pin_id * 4)));
     GPIOB->CFGLR |= ((0x7 << (scl_pin_id * 4)) | (0x7 << (sda_pin_id * 4)));
+    return true;
 }
 
 // f_scl is the I2C clock frequency. Setup TIM2 to get 4 interrupts per period.
 // clamped to: f_scl_min = 550 Hz, f_scl_max = 400 kHz
-void i2c_timer_init(unsigned f_scl) {
-    RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM2, ENABLE);
+bool i2c_timer_init(unsigned f_scl) {
+    unsigned reload = SystemCoreClock / (4 * f_scl) - 1;
+    if (reload < 90 || reload > 0xFFFF)
+        return false;
 
-    unsigned reload = SystemCoreClock / (4 * f_scl);
-    if (reload < 90)
-        reload = 90;
-    reload -= 1;
-    if (reload > 0xFFFF)
-        reload = 0xFFFF;
+    RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM2, ENABLE);
 
     RCC->APB1PCENR |= RCC_TIM2EN;
     TIM2->CTLR1 = 0;  // counter off until a transfer starts
@@ -80,6 +78,7 @@ void i2c_timer_init(unsigned f_scl) {
     TIM2->DMAINTENR = TIM_UIE;
     NVIC_SetPriority(TIM2_IRQn, 0);  // highest priority: keeps SCL timing jitter low
     NVIC_EnableIRQ(TIM2_IRQn);
+    return true;
 }
 
 bool i2c_start_xfer(

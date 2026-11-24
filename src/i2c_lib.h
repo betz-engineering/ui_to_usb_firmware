@@ -15,12 +15,12 @@ typedef enum {
     I2C_ERR_TIMEOUT = 3,  // SCL held low longer than I2C_TIMEOUT_TICKS
 } i2c_err_t;
 
-// Setup I2C pins to use (PORTB0 - 7 only)
-void i2c_gpio_init(unsigned scl_pin_id, unsigned sda_pin_id);
+// Setup I2C pins to use (PORTB0 - 7 only). Returns true on success
+bool i2c_gpio_init(unsigned scl_pin_id, unsigned sda_pin_id);
 
-// Setup I2C clock-rate in [Hz]
+// Setup I2C clock-rate in [Hz]. Returns true on success
 // clamped to: f_scl_min = 550 Hz, f_scl_max = 400 kHz (use ~385 kHz for Fast-mode timing)
-void i2c_timer_init(unsigned f_scl);
+bool i2c_timer_init(unsigned f_scl);
 
 // Write tx_len bytes, then (repeated START) read rx_len bytes. Both may be 0
 // (tx_len = rx_len = 0 is an address-only probe / SMBus quick command).
