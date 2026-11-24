@@ -60,6 +60,28 @@ void i2c_gpio_init(unsigned scl_pin_id, unsigned sda_pin_id) {
     GPIOB->CFGLR |= ((0x7 << (scl_pin_id * 4)) | (0x7 << (sda_pin_id * 4)));
 }
 
+// f_scl is the I2C clock frequency. Setup TIM2 to get 4 interrupts per period.
+// clamped to: f_scl_min = 550 Hz, f_scl_max = 400 kHz
+void i2c_timer_init(unsigned f_scl) {
+    RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM2, ENABLE);
+
+    unsigned reload = SystemCoreClock / (4 * f_scl);
+    if (reload < 90)
+        reload = 90;
+    reload -= 1;
+    if (reload > 0xFFFF)
+        reload = 0xFFFF;
+
+    RCC->APB1PCENR |= RCC_TIM2EN;
+    TIM2->CTLR1 = 0;  // counter off until a transfer starts
+    TIM2->PSC = 0;
+    TIM2->ATRLR = reload;  // must fit 16 bit: f_scl >= 550 Hz at 144 MHz
+    TIM2->INTFR = 0;
+    TIM2->DMAINTENR = TIM_UIE;
+    NVIC_SetPriority(TIM2_IRQn, 0);  // highest priority: keeps SCL timing jitter low
+    NVIC_EnableIRQ(TIM2_IRQn);
+}
+
 bool i2c_start_xfer(
     uint8_t address, const uint8_t *tx, size_t tx_length, uint8_t *rx, size_t rx_length) {
     if (state != I2C_IDLE)
@@ -79,26 +101,6 @@ bool i2c_start_xfer(
 
     TIM2->CTLR1 |= TIM_CEN;  // start ticking, stops again once IDLE
     return true;
-}
-
-// f_scl is the I2C clock frequency. Setup TIM2 to get 4 interrupts per period.
-// clamped to: f_scl_min = 550 Hz, f_scl_max = 400 kHz
-void i2c_timer_init(unsigned f_scl) {
-    unsigned reload = SystemCoreClock / (4 * f_scl);
-    if (reload < 90)
-        reload = 90;
-    reload -= 1;
-    if (reload > 0xFFFF)
-        reload = 0xFFFF;
-
-    RCC->APB1PCENR |= RCC_TIM2EN;
-    TIM2->CTLR1 = 0;  // counter off until a transfer starts
-    TIM2->PSC = 0;
-    TIM2->ATRLR = reload;  // must fit 16 bit: f_scl >= 550 Hz at 144 MHz
-    TIM2->INTFR = 0;
-    TIM2->DMAINTENR = TIM_UIE;
-    NVIC_SetPriority(TIM2_IRQn, 0);  // highest priority: keeps SCL timing jitter low
-    NVIC_EnableIRQ(TIM2_IRQn);
 }
 
 i2c_err_t i2c_result(void) { return state == I2C_IDLE ? error : -1; }
@@ -248,7 +250,10 @@ static void i2c_timer_isr(void) {
     phase++;
 }
 
+volatile unsigned n_ints = 0;
+
 __attribute__((interrupt)) __attribute__((used)) void TIM2_IRQHandler(void) {
     TIM2->INTFR = ~TIM_UIF;  // clear update flag (write 0 clears)
-    i2c_timer_isr();
+    // i2c_timer_isr();
+    n_ints++;
 }

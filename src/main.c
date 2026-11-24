@@ -5,6 +5,7 @@
 #include "core_riscv.h"
 #include "debug.h"
 #include "hardware_interface.h"
+#include "i2c_lib.h"
 #include "system_ch32v20x.h"
 #include "tusb.h"
 #include "ui_board.h"
@@ -189,8 +190,8 @@ int main(void) {
         delay_ms(30);
     }
 
-    // delay_ms(1000);
-    // puts("Hi, this is ui_to_usb firmware!\n");
+    delay_ms(1000);
+    puts("Hi, this is ui_to_usb firmware!\n");
 
     // Init tiny-USB
     tud_init(BOARD_TUD_RHPORT);
@@ -198,10 +199,20 @@ int main(void) {
     reset_ui();
     ui_init(UI_BOARD_1U);
 
+    unsigned ts = millis();
+
+    i2c_timer_init(1000);
+    TIM2->CTLR1 |= TIM_CEN;  // start ticking
+
     while (1) {
         ui_board_poll(false);
         tud_task();
         vendor_task();
-        // print_state();
+
+        if (millis() - ts > 1000) {
+            printf("n_ints: %d\n", n_ints);
+            // print_state();
+            ts = millis();
+        }
     }
 }

@@ -29,3 +29,5 @@ bool i2c_start_xfer(uint8_t addr, const uint8_t *tx, size_t tx_len, uint8_t *rx,
 
 // -1 = busy, otherwise an enum i2c_err value of the last transfer
 i2c_err_t i2c_result(void);
+
+extern volatile unsigned n_ints;
