@@ -92,6 +92,8 @@ enum {
     // CMD_OLED_FLUSH = 0x30,
     CMD_OLED_BRIGHTNESS = 0x31,
     CMD_OLED_INVERTED = 0x32,
+    CMD_I2C_CONFIG = 0x40,
+    CMD_I2C_TRANSACTION = 0x41,
 };
 
 #ifndef GIT_REV
