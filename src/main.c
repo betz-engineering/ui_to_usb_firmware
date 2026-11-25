@@ -178,8 +178,11 @@ int main(void) {
         delay_ms(30);
     }
 
-    // delay_ms(1000);
-    // puts("Hi, this is ui_to_usb firmware!\n");
+#if (SDI_PRINT == 1)
+    delay_ms(1000);
+    puts("Hi, this is ui_to_usb firmware!\n");
+    unsigned ts = millis();
+#endif
 
     // Init tiny-USB
     const tusb_rhport_init_t rh_init = {.role = TUSB_ROLE_DEVICE, .speed = TUSB_SPEED_FULL};
@@ -192,5 +195,12 @@ int main(void) {
         ui_board_poll(false);
         tud_task();
         vendor_task();
+
+#if (SDI_PRINT == 1)
+        if (millis() - ts > 1000) {
+            printf("n_tim2_ints: %d\n", n_tim2_ints);
+            ts = millis();
+        }
+#endif
     }
 }

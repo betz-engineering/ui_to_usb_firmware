@@ -255,7 +255,10 @@ static void i2c_timer_isr(void) {
     phase++;
 }
 
-__attribute__((interrupt)) __attribute__((used)) void TIM2_IRQHandler(void) {
+volatile unsigned n_tim2_ints = 0;
+
+__attribute__((interrupt("WCH-Interrupt-fast"))) __attribute__((used)) void TIM2_IRQHandler(void) {
     TIM2->INTFR = ~TIM_UIF;  // clear update flag (write 0 clears)
     i2c_timer_isr();
+    n_tim2_ints++;
 }
