@@ -2,6 +2,7 @@
 #include "ch32v20x.h"
 #include "ch32v20x_gpio.h"
 #include "ch32v20x_spi.h"
+#include "common/tusb_types.h"
 #include "core_riscv.h"
 #include "debug.h"
 #include "hardware_interface.h"
@@ -71,7 +72,8 @@ static void peripherals_init(void) {
     // --------
     //  GPIOA
     // --------
-    RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA | RCC_APB2Periph_SPI1, ENABLE);
+    RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA | RCC_APB2Periph_GPIOB | RCC_APB2Periph_SPI1,
+                           ENABLE);
 
     GPIO_InitTypeDef gpio = {0};
 
@@ -112,12 +114,17 @@ static void peripherals_init(void) {
     SPI_Cmd(SPI1, ENABLE);
 
     // --------
+    //  I2C
+    // --------
+    i2c_gpio_init(6, 7);
+    i2c_timer_init(100000);
+
+    // --------
     //  USB
     // --------
     assert(SystemCoreClock == 144000000);
     RCC_USBCLKConfig(RCC_USBCLKSource_PLLCLK_Div3);
     RCC_APB1PeriphClockCmd(RCC_APB1Periph_USB, ENABLE);  // FSDEV (port 0)
-    // RCC_AHBPeriphClockCmd(RCC_AHBPeriph_USBFS, ENABLE);  // USBFS (port 1)
 }
 
 // --------------------------------
@@ -143,25 +150,6 @@ void ui_set_dc(bool val) { GPIO_WriteBit(GPIOA, PIN_D_C, val); }
 bool ui_get_int(void) { return GPIO_ReadInputDataBit(GPIOA, PIN_INT_IO); }
 
 unsigned ui_get_cycles(void) { return millis(); }
-
-// static void print_state() {
-//     static int enc_ = 0;
-//     static uint8_t bf_ = 0;
-
-//     int enc = get_encoder_ticks(false);
-//     if (enc != enc_) {
-//         printf("enc: %d\n", enc);
-//         enc_ = enc;
-//     }
-//     int bf = get_button_flags();
-//     if (bf != bf_) {
-//         printf("btn: ");
-//         for (int b = 5; b >= 0; b--)
-//             printf(((1 << b) & bf) ? "1" : "0");
-//         printf("\n");
-//         bf_ = bf;
-//     }
-// }
 
 void reset_ui() {
     // Reset MCP
@@ -190,29 +178,19 @@ int main(void) {
         delay_ms(30);
     }
 
-    delay_ms(1000);
-    puts("Hi, this is ui_to_usb firmware!\n");
+    // delay_ms(1000);
+    // puts("Hi, this is ui_to_usb firmware!\n");
 
     // Init tiny-USB
-    tud_init(BOARD_TUD_RHPORT);
+    const tusb_rhport_init_t rh_init = {.role = TUSB_ROLE_DEVICE, .speed = TUSB_SPEED_FULL};
+    tusb_init(BOARD_TUD_RHPORT, &rh_init);
 
     reset_ui();
     ui_init(UI_BOARD_1U);
-
-    unsigned ts = millis();
-
-    i2c_timer_init(1000);
-    TIM2->CTLR1 |= TIM_CEN;  // start ticking
 
     while (1) {
         ui_board_poll(false);
         tud_task();
         vendor_task();
-
-        if (millis() - ts > 1000) {
-            printf("n_ints: %d\n", n_ints);
-            // print_state();
-            ts = millis();
-        }
     }
 }

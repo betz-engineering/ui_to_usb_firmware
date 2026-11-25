@@ -1,5 +1,6 @@
 #include "i2c_lib.h"
 #include "ch32v20x.h"
+#include <stdbool.h>
 
 // Bit-bang I2C master driven by a periodic timer interrupt.
 // Every bit takes 4 ticks and SCL is left low between bits:
@@ -12,12 +13,14 @@ typedef enum { I2C_IDLE, I2C_START, I2C_BYTE, I2C_STOP } i2c_state_t;
 typedef enum { K_WRITE, K_RADDR, K_RDATA } byte_kind_t;
 
 static volatile i2c_state_t state;
-static volatile i2c_err_t error;
+static volatile i2c_result_t result = I2C_OK;
 static unsigned phase;     // tick within the current START / bit / STOP
 static unsigned bit_idx;   // 0..8 within the current byte
 static byte_kind_t kind;   // what kind of byte is processed right now
 static unsigned tx9, rx9;  // 9 bit shift registers (MSB first, ACK is bit 0)
-static unsigned wait;      // clock stretching timeout counter
+
+static unsigned timeout_ticks_max = 1000;  // max. clock stretching: 25 ms (SMBus timeout)
+static unsigned timeout_ticks_cnt = 0;     // clock stretching timeout counter
 
 static unsigned addr;  // 7-bit slave address
 static const uint8_t *tx_buf;
@@ -64,14 +67,17 @@ bool i2c_gpio_init(unsigned scl_pin_id, unsigned sda_pin_id) {
 // f_scl is the I2C clock frequency. Setup TIM2 to get 4 interrupts per period.
 // clamped to: f_scl_min = 550 Hz, f_scl_max = 400 kHz
 bool i2c_timer_init(unsigned f_scl) {
+    if (f_scl == 0)
+        return false;
     unsigned reload = SystemCoreClock / (4 * f_scl) - 1;
-    if (reload < 90 || reload > 0xFFFF)
+    if (reload < 89 || reload > 0xFFFF)
         return false;
 
-    RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM2, ENABLE);
+    // Set timeout to 25 ms: n_ticks = 0.025 s * 4 * f_scl
+    timeout_ticks_max = f_scl / 10;
 
-    RCC->APB1PCENR |= RCC_TIM2EN;
-    TIM2->CTLR1 = 0;  // counter off until a transfer starts
+    RCC->APB1PCENR |= RCC_TIM2EN;  // Enable clock
+    TIM2->CTLR1 = 0;               // counter off until a transfer starts
     TIM2->PSC = 0;
     TIM2->ATRLR = reload;  // must fit 16 bit: f_scl >= 550 Hz at 144 MHz
     TIM2->INTFR = 0;
@@ -93,20 +99,20 @@ bool i2c_start_xfer(
     rx_buf = rx;
     rx_len = rx_length;
     rx_idx = 0;
-    error = I2C_OK;
+    result = I2C_OK;
     phase = 0;
-    wait = 0;
+    timeout_ticks_cnt = 0;
     state = I2C_START;
 
     TIM2->CTLR1 |= TIM_CEN;  // start ticking, stops again once IDLE
     return true;
 }
 
-i2c_err_t i2c_result(void) { return state == I2C_IDLE ? error : -1; }
+i2c_result_t i2c_get_result(void) { return state == I2C_IDLE ? result : I2C_BUSY; }
 
 // Abort: release both lines and go idle
-static void finish(i2c_err_t err) {
-    error = err;
+static void finish(i2c_result_t err) {
+    result = err;
     SDA_HIGH();
     SCL_HIGH();
     state = I2C_IDLE;
@@ -115,10 +121,10 @@ static void finish(i2c_err_t err) {
 // True once SCL is really high. Times out if a slave stretches the clock too long.
 static bool scl_is_high(void) {
     if (SCL_READ()) {
-        wait = 0;
+        timeout_ticks_cnt = 0;
         return true;
     }
-    if (++wait > I2C_TIMEOUT_TICKS)
+    if (++timeout_ticks_cnt > timeout_ticks_max)
         finish(I2C_ERR_TIMEOUT);
     return false;
 }
@@ -146,7 +152,7 @@ static void byte_done(void) {
     if (kind == K_RDATA)
         rx_buf[rx_idx++] = rx9 >> 1;
     else if (rx9 & 1) {  // NACK from slave
-        error = I2C_ERR_NACK;
+        result = I2C_ERR_NACK;
         state = I2C_STOP;
         return;
     }
@@ -249,10 +255,7 @@ static void i2c_timer_isr(void) {
     phase++;
 }
 
-volatile unsigned n_ints = 0;
-
 __attribute__((interrupt)) __attribute__((used)) void TIM2_IRQHandler(void) {
     TIM2->INTFR = ~TIM_UIF;  // clear update flag (write 0 clears)
-    // i2c_timer_isr();
-    n_ints++;
+    i2c_timer_isr();
 }

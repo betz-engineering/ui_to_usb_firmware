@@ -1,6 +1,7 @@
 """User-space library for the ui_to_usb Rev: 1  based on Ch32V203"""
 
 from enum import IntEnum, IntFlag
+from time import sleep
 from PIL import Image
 import numpy as np
 import struct
@@ -29,6 +30,14 @@ class EV(IntFlag):
     # Encoder ticks. Alternative to get_encoder_ticks()
     ROT_CCW = 1 << 16
     ROT_CW = 1 << 17
+
+
+class I2C_RESULT(IntFlag):
+    OK = 0  # Transaction succeeded
+    ERR_NACK = 1  # address or data byte was not acknowledged
+    ERR_BUS = 2  # SDA low before START (bus busy / stuck)
+    ERR_TIMEOUT = 3  # SCL held low longer than 25 ms
+    BUSY = 15  # Transaction in progress
 
 
 def find_ui_board_devices():
@@ -69,6 +78,9 @@ class CMD(IntEnum):
     # OLED_FLUSH = 0x30
     OLED_BRIGHTNESS = 0x31
     OLED_INVERTED = 0x32
+    I2C_CONFIG = 0x40
+    I2C_TRANSACTION = 0x41
+    I2C_RESULT = 0x42
 
 
 # // This library supports both:
@@ -139,3 +151,35 @@ class UiBoard:
         # Pack two pixels per byte
         packed = (arr4[:, ::2] << 4) | arr4[:, 1::2]
         self.send_fb(packed.flatten().tobytes())
+
+    def i2c_config(self, f_scl=100, scl_pin=0, sda_pin=1):
+        """Setup the I2C mode. External pullups are needed!!!
+        scl_pin and sda_pin are from 0 to 7 and choose a PORTB GPIO pin
+        f_scl is the clock frequency in [kHz] from 1 to 400 kHz
+        """
+        if scl_pin < 0 or scl_pin > 7 or sda_pin < 0 or sda_pin > 7:
+            raise RuntimeError("Invlaid pins. Only 0 - 7 is allowed")
+        self.dev.ctrl_transfer(REQ.H2D, CMD.I2C_CONFIG, (sda_pin << 4) | scl_pin, f_scl)
+
+    def i2c_transfer(self, device_addr, tx_data=b"", n_rx=0):
+        """Start an I2C transaction and block until it's done.
+        device_addr is the 7 bit chip address
+        tx_data is the data to send (min. 0, max. 64 bytes)
+        n_rx is the number of bytes to receive (min. 0, max. 63 bytes)
+        Returns status, received data as bytes
+        """
+        self.dev.ctrl_transfer(REQ.H2D, CMD.I2C_TRANSACTION, device_addr, n_rx, tx_data)
+        result, dat = None, None
+        for _ in range(32):
+            result, dat = self.i2c_result()
+            if result != I2C_RESULT.BUSY:
+                break
+            sleep(1e-3)
+        return result, dat
+
+    def i2c_result(self):
+        """Fetches the result of the last transaction
+        returns: I2C_RESULT, received data
+        """
+        arr = self.dev.ctrl_transfer(REQ.D2H, CMD.I2C_RESULT, data_or_wLength=64)
+        return I2C_RESULT(arr[0]), bytes(arr[1:])

@@ -7,6 +7,7 @@
 #include "ssd1322.h"
 #include "tusb.h"
 #include "ui_board.h"
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -32,23 +33,12 @@ static unsigned activity_count = 0;  // blink the Status LED on activity
 // buffers for the I2C command
 static uint8_t i2c_tx_buffer[64];
 static uint8_t i2c_rx_buffer[64];
-static tusb_control_request_t pending_request;
-static bool i2c_in_progress = false;
-static uint8_t i2c_rhport = 0;
+static unsigned i2c_n_rx = 0;
+static uint8_t i2c_address = 0;
 
 void vendor_task(void) {
     if (!tud_vendor_mounted())
         return;
-
-    // -----------------------------------------------------------
-    //  Interrupt based I2C transaction
-    // -----------------------------------------------------------
-    if (i2c_in_progress && i2c_result() != -1) {
-        // Transaction has finished. Send an ACk to the host.
-        i2c_rx_buffer[0] = i2c_result();  // First byte is the status byte
-        tud_control_xfer(i2c_rhport, &pending_request, i2c_rx_buffer, pending_request.wIndex + 1);
-        i2c_in_progress = false;
-    }
 
     // -----------------------------------------------------------
     //  Bulk endpoint to receive framebuffer data from the PC
@@ -131,6 +121,7 @@ bool tud_vendor_control_xfer_cb(uint8_t rhport,
                                 tusb_control_request_t const *request) {
     input_packet_t packet = {0};
     bool ret = false;
+    i2c_result_t result;
 
     // 1. SETUP STAGE (Host sends the command)
     if (stage == CONTROL_STAGE_SETUP) {
@@ -165,28 +156,48 @@ bool tud_vendor_control_xfer_cb(uint8_t rhport,
             return tud_control_status(rhport, request);
 
         case CMD_I2C_CONFIG:
-            // Will STALL on invalid parameters
+            // Will STALL on invalid parameters or running transfer
             // wValue has the pin numbers (4 bit each)
             // wIndex has the SCL frequency in kHz
+            if (i2c_get_result() == I2C_BUSY)
+                return false;
+
             ret = i2c_gpio_init(request->wValue & 0xF, (request->wValue >> 4) & 0xF);
             if (!ret)
                 return false;
+
             ret = i2c_timer_init(((unsigned)request->wIndex) * 1000);
             if (!ret)
                 return false;
+
             return tud_control_status(rhport, request);
 
         case CMD_I2C_TRANSACTION:
             // wValue has the 7 bit I2C address
             // wIndex has the number of bytes to receive
-            if (request->wLength > sizeof(i2c_tx_buffer) || i2c_in_progress ||
-                request->wIndex > sizeof(i2c_rx_buffer) - 1 || request->wValue >= 128)
+            if (request->wLength > sizeof(i2c_tx_buffer) ||
+                request->wIndex > sizeof(i2c_rx_buffer) - 1 || request->wValue >= 128 ||
+                i2c_get_result() == I2C_BUSY)
                 return false;
+
             // Accept the data packet
+            i2c_address = request->wValue;
+            i2c_n_rx = request->wIndex;
+
+            // No TX payload. STAGE_DATA would be skipped, start the transfer here.
+            if (request->wLength == 0)
+                i2c_start_xfer(i2c_address, NULL, 0, &i2c_rx_buffer[1], i2c_n_rx);
+
             return tud_control_xfer(rhport, request, i2c_tx_buffer, request->wLength);
 
+        // host fetches status / result of current transaction
+        // host needs to fetch __at least__ i2c_n_rx + 1 bytes.
         case CMD_I2C_RESULT:
-            return tud_control_xfer(rhport, request, i2c_tx_buffer, request->wLength);
+            result = i2c_get_result();
+            i2c_rx_buffer[0] = result;
+            if (result == I2C_BUSY)  // not ready yet
+                return tud_control_xfer(rhport, request, i2c_rx_buffer, 1);
+            return tud_control_xfer(rhport, request, i2c_rx_buffer, i2c_n_rx + 1);
 
         default:
             // Unknown RPC -> STALL (Python will raise USBError)
@@ -196,17 +207,11 @@ bool tud_vendor_control_xfer_cb(uint8_t rhport,
         switch (request->bRequest) {
         case CMD_I2C_TRANSACTION:
             // All the I2C TX data has been received at this point. Start the I2C transaction.
-            pending_request = *request;  // Copy the request object, needed to send an ACK later
-            i2c_start_xfer(request->wValue << 1,
-                           i2c_tx_buffer,
-                           request->wLength,
-                           &i2c_rx_buffer[1],
-                           request->wIndex);
-            i2c_in_progress = true;
-            return true;  // OUT transfer is finished. The host must start a new IN transfer
+            return i2c_start_xfer(
+                i2c_address, i2c_tx_buffer, request->wLength, &i2c_rx_buffer[1], i2c_n_rx);
 
         default:
-            return false;
+            return true;
         }
     }
 
