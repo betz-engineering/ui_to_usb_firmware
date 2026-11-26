@@ -98,8 +98,20 @@ class UiBoard:
         dev.set_configuration()
         self.led_state = 0  # {0, LEDB_B, LEDB_G, LEDB_R, 0, LEDA_B, LEDA_G, LEDA_R,}
 
+    def ctrl_transfer(self, *args, **kwargs):
+        """like dev.ctrl_transfer() but with 3 attempts on USB_ERROR
+        works around a race condition in TinyUSB"""
+        # Under heavy load (SPI and I2C), TinyUSB occasionally fails a control request
+        # with an I/O error, followed by one timed out request. Retry then.
+        for i in range(3):
+            try:
+                return self.dev.ctrl_transfer(*args, **kwargs, timeout=100)
+            except usb.core.USBError:
+                if i >= 2:
+                    raise
+
     def reset(self, board_type=BOARD_TYPE.UI_BOARD_1U):
-        self.dev.ctrl_transfer(REQ.H2D, CMD.RESET, board_type, 0)
+        self.ctrl_transfer(REQ.H2D, CMD.RESET, board_type, 0)
 
     def set_led(self, leda=None, ledb=None):
         """set the LED color. Value is from 0 - 7"""
@@ -111,19 +123,19 @@ class UiBoard:
             self.led_state &= ~(7 << 4)
             self.led_state |= (ledb & 7) << 4
 
-        self.dev.ctrl_transfer(REQ.H2D, CMD.IO_LEDS, self.led_state, 0)
+        self.ctrl_transfer(REQ.H2D, CMD.IO_LEDS, self.led_state, 0)
 
     def set_inverted(self, val=False):
         """invert the display (prevents burn-in if done periodically)"""
-        self.dev.ctrl_transfer(REQ.H2D, CMD.OLED_INVERTED, val, 0)
+        self.ctrl_transfer(REQ.H2D, CMD.OLED_INVERTED, val, 0)
 
     def set_brightness(self, val=16):
         """set OLED brightness (0 = off, 1 - 16 = on)"""
-        self.dev.ctrl_transfer(REQ.H2D, CMD.OLED_BRIGHTNESS, val, 0)
+        self.ctrl_transfer(REQ.H2D, CMD.OLED_BRIGHTNESS, val, 0)
 
     def get_fw_version(self):
         """return firmware version string (output from git describe)"""
-        data = self.dev.ctrl_transfer(REQ.D2H, CMD.VERSION, 0, 0, 64)
+        data = self.ctrl_transfer(REQ.D2H, CMD.VERSION, 0, 0, 64)
         return data.tobytes().decode("utf-8")
 
     def get_inputs(self, reset_encoder=False):
@@ -132,7 +144,7 @@ class UiBoard:
         event_flags indicates button events since last call as BUTTONS enum.
         encoder_value is the number of ticks since last call (sign indicates direction)
         """
-        data = self.dev.ctrl_transfer(REQ.D2H, CMD.BTNS_ENC, reset_encoder, 0, 8)
+        data = self.ctrl_transfer(REQ.D2H, CMD.BTNS_ENC, reset_encoder, 0, 8)
         event_flags, encoder_value = struct.unpack("Ii", data)
         return EV(event_flags), encoder_value
 
@@ -156,8 +168,8 @@ class UiBoard:
         f_scl is the clock frequency in [kHz] from 1 to 400 kHz
         """
         if scl_pin < 0 or scl_pin > 7 or sda_pin < 0 or sda_pin > 7:
-            raise RuntimeError("Invlaid pins. Only 0 - 7 is allowed")
-        self.dev.ctrl_transfer(REQ.H2D, CMD.I2C_CONFIG, (sda_pin << 4) | scl_pin, f_scl)
+            raise RuntimeError("Invalid pins. Only 0 - 7 is allowed")
+        self.ctrl_transfer(REQ.H2D, CMD.I2C_CONFIG, (sda_pin << 4) | scl_pin, f_scl)
 
     def i2c_transfer(self, device_addr, tx_data=b"", n_rx=0):
         """Start an I2C transaction and block until it's done.
@@ -166,7 +178,7 @@ class UiBoard:
         n_rx is the number of bytes to receive (min. 0, max. 63 bytes)
         Returns status, received data as bytes
         """
-        self.dev.ctrl_transfer(REQ.H2D, CMD.I2C_TRANSACTION, device_addr, n_rx, tx_data)
+        self.ctrl_transfer(REQ.H2D, CMD.I2C_TRANSACTION, device_addr, n_rx, tx_data)
         result, dat = None, None
         for _ in range(32):
             result, dat = self.i2c_result()
@@ -179,14 +191,5 @@ class UiBoard:
         """Fetches the result of the last transaction
         returns: I2C_RESULT, received data
         """
-        # Under heavy load (SPI and I2C), TinyUSB occasionally fails a control request
-        # (an I/O error, followed by one timed out request). Retry then.
-        for i in range(3):
-            try:
-                arr = self.dev.ctrl_transfer(
-                    REQ.D2H, CMD.I2C_RESULT, data_or_wLength=64, timeout=100
-                )
-                return I2C_RESULT(arr[0]), bytes(arr[1:])
-            except usb.core.USBError:
-                if i >= 2:
-                    raise
+        arr = self.ctrl_transfer(REQ.D2H, CMD.I2C_RESULT, data_or_wLength=64)
+        return I2C_RESULT(arr[0]), bytes(arr[1:])
