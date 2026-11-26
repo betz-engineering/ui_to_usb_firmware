@@ -68,7 +68,7 @@ def main():
     parser.add_argument(
         "--i2c",
         action="store_true",
-        help="stress test: hammer a FS3000 sensor on PB0 = SCL, PB1 = SDA while redrawing every frame",
+        help="stress test: hammer a FS3000 sensor on PB0 = SDA, PB1 = SCL while redrawing every frame",
     )
     args = parser.parse_args()
 
@@ -96,7 +96,7 @@ def main():
 
     hammer = None
     if args.i2c:
-        ui.i2c_config(400, scl_pin=6, sda_pin=7)
+        ui.i2c_config(400, sda_pin=0, scl_pin=1)
         hammer = I2cHammer(ui)
         hammer.start()
         t_stats, n_stats = monotonic(), 0
