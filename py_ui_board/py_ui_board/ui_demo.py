@@ -4,11 +4,14 @@ Revisions Rev: - and Rev: 1 are supported.
 """
 
 import argparse
+import threading
+from collections import Counter
 from pathlib import Path
-from time import sleep
+from time import monotonic, sleep
 
+import usb.core
 from PIL import Image, ImageDraw, ImageFont
-from py_ui_board.ch32 import BOARD_TYPE, EV
+from py_ui_board.ch32 import BOARD_TYPE, EV, I2C_RESULT
 from py_ui_board.gui_primitives import GuiPrimitives
 
 script_path = Path(__file__).resolve()
@@ -16,6 +19,42 @@ script_path = Path(__file__).resolve()
 F_CREEP = ImageFont.truetype(script_path.parent / "creep.bdf", 16)
 F_BIG = ImageFont.load_default(24)
 colors = ["Bk", "Rd", "Gn", "Ye", "Bu", "Vt", "Tq", "Wh"]
+
+FS3000_ADDR = 0x28
+
+
+class I2cHammer(threading.Thread):
+    """Stress test: read the FS3000 air velocity sensor as fast as possible in the background.
+    Its 5 byte reply (checksum, data_h, data_l, 2 generic bytes) sums to 0 mod 256,
+    so corrupted reads are detected, not only failed transfers."""
+
+    def __init__(self, ui):
+        super().__init__(daemon=True)
+        self.ui = ui
+        self.n = 0  # transactions
+        self.errors = Counter()  # I2C_RESULT / "checksum" / "usb" -> count
+        self.raw = 0  # last valid 12 bit sensor value
+        self.running = True
+
+    def run(self):
+        while self.running:
+            try:
+                res, dat = self.ui.i2c_transfer(FS3000_ADDR, b"", 5)
+            except usb.core.USBError as e:
+                self.errors[f"usb: {e}"] += 1
+                continue
+            finally:
+                self.n += 1
+            if res != I2C_RESULT.OK:
+                self.errors[res.name] += 1
+            elif sum(dat[:5]) & 0xFF:
+                self.errors["checksum"] += 1
+                print("checksum error:", dat[:5].hex(" "))
+            else:
+                self.raw = ((dat[1] & 0x0F) << 8) | dat[2]
+
+    def n_errors(self):
+        return sum(self.errors.values())
 
 
 def main():
@@ -25,6 +64,11 @@ def main():
         choices=["-", "1"],
         default="1",
         help="Revision of the ui_to_usb board. default: 1",
+    )
+    parser.add_argument(
+        "--i2c",
+        action="store_true",
+        help="stress test: hammer a FS3000 sensor on PB0 = SCL, PB1 = SDA while redrawing every frame",
     )
     args = parser.parse_args()
 
@@ -50,6 +94,13 @@ def main():
     is_inverted = False
     is_ui_1u = True
 
+    hammer = None
+    if args.i2c:
+        ui.i2c_config(400, scl_pin=6, sda_pin=7)
+        hammer = I2cHammer(ui)
+        hammer.start()
+        t_stats, n_stats = monotonic(), 0
+
     print("\nRunning demo, CTRL+C to quit ...")
     reset = False
     while True:
@@ -74,7 +125,14 @@ def main():
             is_inverted = not is_inverted
             ui.set_inverted(is_inverted)
 
-        if events != 0 or frame == 0:
+        if hammer is not None and monotonic() - t_stats >= 1:
+            dt, t_stats = monotonic() - t_stats, monotonic()
+            rate, n_stats = (hammer.n - n_stats) / dt, hammer.n
+            print(
+                f"I2C: {rate:6.0f} / s, {hammer.n} total, raw = {hammer.raw:4d}, errors: {dict(hammer.errors)}"
+            )
+
+        if events != 0 or frame == 0 or hammer is not None:
             img = Image.new("L", (256, 64), color=0)
 
             dr = ImageDraw.Draw(img)
@@ -116,9 +174,13 @@ def main():
                 anchor="ms",
                 font=F_BIG,
             )
+            if hammer is None:
+                txt = "Smaller text\nlooks like\nthis!!!"
+            else:
+                txt = f"n {hammer.n}\nerr {hammer.n_errors()}\nraw {hammer.raw}"
             dr.text(
                 (165, 12),
-                "Smaller text\nlooks like\nthis!!!",
+                txt,
                 fill=255,
                 anchor="ls",
                 font=F_CREEP,

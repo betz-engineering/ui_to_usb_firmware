@@ -68,6 +68,9 @@ __attribute__((interrupt)) __attribute__((used)) void USBWakeUp_IRQHandler(void)
 #endif
 }
 
+// Do nothing on TinyUSB asserts
+void tusb_breakpoint(void) {}
+
 static void peripherals_init(void) {
     // --------
     //  GPIOA
@@ -181,7 +184,6 @@ int main(void) {
 #if (SDI_PRINT == 1)
     delay_ms(1000);
     puts("Hi, this is ui_to_usb firmware!\n");
-    unsigned ts = millis();
 #endif
 
     // Init tiny-USB
@@ -195,12 +197,5 @@ int main(void) {
         ui_board_poll(false);
         tud_task();
         vendor_task();
-
-#if (SDI_PRINT == 1)
-        if (millis() - ts > 1000) {
-            printf("n_tim2_ints: %d\n", n_tim2_ints);
-            ts = millis();
-        }
-#endif
     }
 }

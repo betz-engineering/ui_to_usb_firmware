@@ -82,7 +82,9 @@ bool i2c_timer_init(unsigned f_scl) {
     TIM2->ATRLR = reload;  // must fit 16 bit: f_scl >= 550 Hz at 144 MHz
     TIM2->INTFR = 0;
     TIM2->DMAINTENR = TIM_UIE;
-    NVIC_SetPriority(TIM2_IRQn, 0);  // highest priority: keeps SCL timing jitter low
+
+    // USB interrupt gets priority over the I2C one
+    NVIC_SetPriority(TIM2_IRQn, 0x80);
     NVIC_EnableIRQ(TIM2_IRQn);
     return true;
 }
@@ -255,10 +257,7 @@ static void i2c_timer_isr(void) {
     phase++;
 }
 
-volatile unsigned n_tim2_ints = 0;
-
 __attribute__((interrupt("WCH-Interrupt-fast"))) __attribute__((used)) void TIM2_IRQHandler(void) {
     TIM2->INTFR = ~TIM_UIF;  // clear update flag (write 0 clears)
     i2c_timer_isr();
-    n_tim2_ints++;
 }

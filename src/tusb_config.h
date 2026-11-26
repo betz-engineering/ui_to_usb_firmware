@@ -11,4 +11,7 @@
 // Class Config
 #define CFG_TUD_VENDOR 1
 
+// Do nothing on assert. Otherwise a failed USB request would trap and hang the CPU.
+#define CFG_TUSB_DEBUG_BREAKPOINT tusb_breakpoint
+
 #endif

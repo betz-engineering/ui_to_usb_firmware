@@ -1,15 +1,13 @@
 """User-space library for the ui_to_usb Rev: 1  based on Ch32V203"""
 
+import struct
 from enum import IntEnum, IntFlag
 from time import sleep
-from PIL import Image
+
 import numpy as np
-import struct
 import usb.core
 import usb.util
-
-
-from enum import IntFlag
+from PIL import Image
 
 
 class EV(IntFlag):
@@ -181,5 +179,14 @@ class UiBoard:
         """Fetches the result of the last transaction
         returns: I2C_RESULT, received data
         """
-        arr = self.dev.ctrl_transfer(REQ.D2H, CMD.I2C_RESULT, data_or_wLength=64)
-        return I2C_RESULT(arr[0]), bytes(arr[1:])
+        # Under heavy load (SPI and I2C), TinyUSB occasionally fails a control request
+        # (an I/O error, followed by one timed out request). Retry then.
+        for i in range(3):
+            try:
+                arr = self.dev.ctrl_transfer(
+                    REQ.D2H, CMD.I2C_RESULT, data_or_wLength=64, timeout=100
+                )
+                return I2C_RESULT(arr[0]), bytes(arr[1:])
+            except usb.core.USBError:
+                if i >= 2:
+                    raise

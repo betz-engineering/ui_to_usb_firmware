@@ -26,4 +26,3 @@ bool i2c_start_xfer(uint8_t addr, const uint8_t *tx, size_t tx_len, uint8_t *rx,
 // see i2c_result_t for meaning of the return values
 i2c_result_t i2c_get_result(void);
 
-extern volatile unsigned n_tim2_ints;
