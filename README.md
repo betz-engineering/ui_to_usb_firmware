@@ -2,6 +2,9 @@
 
 [ui_to_usb](https://betz-engineering.ch/open_hardware/ui_to_usb/) is a USB Interface Add-On for ui_board and [ui_board_1u](https://betz-engineering.ch/open_hardware/ui_board_1u/).
 
+The board is supported by the [py_ui_board](https://github.com/betz-engineering/py_ui_board) GUI library.
+To use it directly from python, only the libusb based driver is needed: [ui_to_usb.py](https://github.com/betz-engineering/py_ui_board/blob/main/src/py_ui_board/drivers/ui_to_usb.py).
+
 As of now there are 2 hardware revisions of ui_to_usb:
 
   1. __Rev: -__: based on a FTDI FT232H, which doesn't have programmable firmware and makes the host PC suffer from performance issues when polling the rotary encoder at high speeds. There is an [experimental python library](py_ui_board/py_ui_board/ft232h.py), which is obsolete at this point.
