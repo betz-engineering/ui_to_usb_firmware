@@ -21,13 +21,19 @@ Most functionality is achieved through the control endpoint (EP0), as defined in
   * 0x31: CMD_OLED_BRIGHTNESS, set OLED brightness level from 0 (off) to 16 (max)
   * 0x32: CMD_OLED_INVERTED, set OLED inverted mode on or off. Can be used to minimize burn-in.
 
-
 A bulk endpoint (EP1) is used for framebuffer updates. A complete framebuffer always needs to be written in one go. It has 8192 bytes.
 After sending, there needs to be a 4 ms quiet period before sending the next FB.
 
 On the host PC side, these endpoints can be easily accessed with libusb / pyusb.
 
 In the future I will explore if more native kernel drivers could be used (mouse-wheel events, keyboard LEDs, etc.).
+
+## Controlling the extension port
+A 12 pin extension port is available on the PCB. It connects directly to the GPIOs of the CH32. PORTB0 - 7 (except PORTB2) and PORTA13 - 15 are available.
+
+The GPIO-control functions for PORTB have been made directly accessible to the USB interface. Pins can be configured as input, push-pull output or open-drain output.
+
+In addition, the firmware implements a fully featured I2C controller. SCL and SDA can be configured for any of the PORTB pins.
 
 ## Compilation
 This project requires [platform.io](https://docs.platformio.org/en/latest/core/installation/methods/installer-script.html#installation-installer-script). Once installed, compile the firmware with
