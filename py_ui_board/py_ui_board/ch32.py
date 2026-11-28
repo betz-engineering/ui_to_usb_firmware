@@ -49,8 +49,9 @@ def find_ui_board_devices():
 
             if manufacturer == "betz-engineering.ch" and product == "ui_to_usb":
                 matching_devices.append(dev)
-        except (usb.core.USBError, ValueError):
+        except (usb.core.USBError, ValueError) as e:
             # Skip devices we can't read strings from
+            print(f"WARNING: Skipping {dev!r}, {e}")
             continue
     return sorted(matching_devices, key=lambda d: d.serial_number)
 

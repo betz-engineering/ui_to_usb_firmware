@@ -41,3 +41,17 @@ To put the ui_to_usb in bootloader mode, keep the `BOOT0` button pushed and trig
 ```bash
 pio run -t upload
 ```
+
+## USB permissions
+Add the following UDEV rule to allow read and write access to ui_to_usb:
+
+```bash
+sudo vim /etc/udev/rules.d/50-libusb-shared.rules
+
+  SUBSYSTEM=="usb", ATTRS{idVendor}=="16c0", ATTRS{idProduct}=="05dc", MODE="0666", TAG+="uaccess"
+
+sudo udevadm control --reload-rules
+sudo udevadm trigger
+```
+
+ui_to_usb uses a [free shared VID:PID pair](https://github.com/obdev/v-usb/blob/master/usbdrv/USB-IDs-for-free.txt) provided by the v-usb project.
