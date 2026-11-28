@@ -22,9 +22,6 @@ typedef enum { UI_BOARD, UI_BOARD_1U, UI_BOARD_1U_291V } t_ui_board_type;
 // Long push
 #define EV_ENC_L (1 << 12)
 #define EV_BACK_L (1 << 13)
-// Encoder ticks. Alternative to get_encoder_ticks()
-#define EV_ROT_CCW (1 << 16)
-#define EV_ROT_CW (1 << 17)
 
 // Call this once to initialize the ui_board
 // before calling this:

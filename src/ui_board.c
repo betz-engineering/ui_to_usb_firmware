@@ -223,13 +223,10 @@ bool ui_board_poll(bool new_frame) {
     return false;
 }
 
-static int processed_ticks = 0;
-
 void ui_init(t_ui_board_type value) {
     board_type = value;
     enc_sum = 0;
     event_flags = 0;
-    processed_ticks = 0;
 
     // Use _banked_ register access on the MCP23S17, for compatibility with MCP23S08
     mcp23_write8(MCP23_IOCON_INTERLEAVED, INTPOL | DISSLW | SEQOP | BANK);
@@ -262,7 +259,6 @@ int get_encoder_ticks(bool reset) {
 
     if (reset) {
         last_ticks = tmp;
-        processed_ticks = 0;
     }
 
     // Electrical steps / tick is 4 times higher for ui_board_1u
@@ -272,25 +268,9 @@ int get_encoder_ticks(bool reset) {
     return ret;
 }
 
-// Converts the encoder number into a series of left / right events
-static unsigned get_rotate_events(void) {
-    unsigned flags = 0;
-    int ticks = get_encoder_ticks(false);
-
-    if (ticks < processed_ticks) {
-        flags |= EV_ROT_CCW;
-        processed_ticks--;
-    } else if (ticks > processed_ticks) {
-        flags |= EV_ROT_CW;
-        processed_ticks++;
-    }
-    return flags;
-}
-
 unsigned get_event_flags(void) {
     unsigned ret = event_flags;
     event_flags &= 0xF;  // clear the sticky button-push event flags
-    ret |= get_rotate_events();
     return ret;
 }
 

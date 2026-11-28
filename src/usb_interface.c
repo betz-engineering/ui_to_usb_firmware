@@ -96,11 +96,16 @@ enum {
     CMD_VERSION = 0x11,
     CMD_BTNS_ENC = 0x20,
     CMD_IO_LEDS = 0x21,
-    // CMD_IO_AUX_OE = 0x28,
-    // CMD_IO_AUX_OL = 0x29,
-    // CMD_OLED_FLUSH = 0x30,
+    // Aux GPIO commands
+    CMD_GPIOB_INIT = 0x28,
+    CMD_GPIOB_READ = 0x29,
+    CMD_GPIOB_WRITE = 0x2a,
+    CMD_GPIOB_SETBIT = 0x2b,
+    CMD_GPIOB_RESETBIT = 0x2c,
+    // OLED control
     CMD_OLED_BRIGHTNESS = 0x31,
     CMD_OLED_INVERTED = 0x32,
+    // I2C commands
     CMD_I2C_CONFIG = 0x40,
     CMD_I2C_TRANSACTION = 0x41,
     CMD_I2C_RESULT = 0x42,
@@ -119,9 +124,11 @@ const static char fw_version[] = GIT_REV;
 bool tud_vendor_control_xfer_cb(uint8_t rhport,
                                 uint8_t stage,
                                 tusb_control_request_t const *request) {
-    input_packet_t packet = {0};
+    static input_packet_t packet = {0};
     bool ret = false;
     i2c_result_t result;
+    static unsigned tmp = 0;
+    GPIO_InitTypeDef gpio = {.GPIO_Speed = GPIO_Speed_50MHz};
 
     // 1. SETUP STAGE (Host sends the command)
     if (stage == CONTROL_STAGE_SETUP) {
@@ -139,6 +146,32 @@ bool tud_vendor_control_xfer_cb(uint8_t rhport,
         case CMD_IO_LEDS:
             set_leda(request->wValue & 0xF);
             set_ledb((request->wValue >> 4) & 0xF);
+            return tud_control_status(rhport, request);
+
+        case CMD_GPIOB_INIT:
+            // wValue: see GPIOMode_TypeDef
+            // wIndex: 16 bit pin mask where wValue applies
+            // don't touch the I2C pins if I2C is used
+            gpio.GPIO_Pin = request->wValue;
+            gpio.GPIO_Mode = request->wIndex;
+            GPIO_Init(GPIOB, &gpio);
+            return tud_control_status(rhport, request);
+
+        case CMD_GPIOB_READ:
+            tmp = GPIO_ReadInputData(GPIOB);
+            return tud_control_xfer(rhport, request, (void *)&tmp, 2);
+
+        case CMD_GPIOB_WRITE:
+            // Careful, can't be used at the same time as I2C mode
+            GPIO_Write(GPIOB, request->wValue);
+            return tud_control_status(rhport, request);
+
+        case CMD_GPIOB_SETBIT:
+            GPIO_SetBits(GPIOB, request->wValue);
+            return tud_control_status(rhport, request);
+
+        case CMD_GPIOB_RESETBIT:
+            GPIO_ResetBits(GPIOB, request->wValue);
             return tud_control_status(rhport, request);
 
         case CMD_BTNS_ENC:

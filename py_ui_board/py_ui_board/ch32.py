@@ -25,9 +25,6 @@ class EV(IntFlag):
     # Long push
     ENC_L = 1 << 12
     BACK_L = 1 << 13
-    # Encoder ticks. Alternative to get_encoder_ticks()
-    ROT_CCW = 1 << 16
-    ROT_CW = 1 << 17
 
 
 class I2C_RESULT(IntFlag):
@@ -71,14 +68,31 @@ class CMD(IntEnum):
     VERSION = 0x11
     BTNS_ENC = 0x20
     IO_LEDS = 0x21
-    # IO_AUX_OE = 0x28
-    # IO_AUX_OL = 0x29
-    # OLED_FLUSH = 0x30
+    # Aux GPIO commands
+    GPIOB_INIT = 0x28
+    GPIOB_READ = 0x29
+    GPIOB_WRITE = 0x2A
+    GPIOB_SETBIT = 0x2B
+    GPIOB_RESETBIT = 0x2C
+    # OLED control
     OLED_BRIGHTNESS = 0x31
     OLED_INVERTED = 0x32
+    # I2C commands
     I2C_CONFIG = 0x40
     I2C_TRANSACTION = 0x41
     I2C_RESULT = 0x42
+
+
+# CH32 GPIO modes
+class GPIO_MODE(IntEnum):
+    AIN = 0x0  # Analog Input
+    IN_FLOATING = 0x04  # Digital input, no pull resistors, reset default
+    IPD = 0x28  # Input with Pull-Down (40 kOhm)
+    IPU = 0x48  # Input with Pull-Up
+    Out_OD = 0x14  # Open Drain output. No internal pull-up.
+    Out_PP = 0x10  # Push Pull output
+    AF_OD = 0x1C  # Alternate function Open Drain
+    AF_PP = 0x18  # Alternate function Push Pull
 
 
 # // This library supports both:
@@ -193,3 +207,25 @@ class UiBoard:
         """
         arr = self.ctrl_transfer(REQ.D2H, CMD.I2C_RESULT, data_or_wLength=64)
         return I2C_RESULT(arr[0]), bytes(arr[1:])
+
+    def gpiob_read(self) -> int:
+        """Read current pin state of PORTB"""
+        ret = self.ctrl_transfer(REQ.D2H, CMD.GPIOB_READ, 0, 0, 2)
+        return (ret[1] << 8) | ret[0]
+
+    def gpiob_set_bit(self, bit_mask: int):
+        """Set output pins on PORTB high"""
+        self.ctrl_transfer(REQ.H2D, CMD.GPIOB_SETBIT, bit_mask, 0)
+
+    def gpiob_reset_bit(self, bit_mask: int):
+        """Set output pins on PORTB low"""
+        self.ctrl_transfer(REQ.H2D, CMD.GPIOB_RESETBIT, bit_mask, 0)
+
+    def gpiob_write(self, value: int):
+        """Set all output pins of GPIOB. This breaks I2C."""
+        self.ctrl_transfer(REQ.H2D, CMD.GPIOB_WRITE, value, 0)
+
+    def gpiob_init(self, bit_mask: int, gpio_mode: GPIO_MODE):
+        """Init a PORTB GPIO pin to a specific mode
+        this may break I2C if the pins overlap"""
+        self.ctrl_transfer(REQ.H2D, CMD.GPIOB_INIT, bit_mask, gpio_mode)
